@@ -103,6 +103,12 @@
                                 <span x-show="!model.is_verified"
                                     class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200">Unverified</span>
 
+                                <template x-if="checkWeights()">
+                                    <span
+                                        class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 uppercase tracking-wide">Weights
+                                        Available</span>
+                                </template>
+
                                 <template x-for="use in getUseAsArray(model.card_data.Model['Model properties'].Use)">
                                     <span
                                         class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 uppercase tracking-wide"
@@ -370,6 +376,24 @@
                                 </div>
                                 <input type="text" x-model="draft.Model.Link"
                                     class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                            </div>
+
+                            <div x-show="draft.Model.Link && draft.Model.Link.length > 0">
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Contains Weights?</label>
+                                    <select
+                                        x-model="severities['Model.Model properties.repository_analysis.contains_weights']"
+                                        class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <select x-model="draft.Model['Model properties'].repository_analysis.contains_weights"
+                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                                    <option value="n/a">N/A</option>
+                                    <option value="yes">Yes</option>
+                                    <option value="no">No</option>
+                                </select>
                             </div>
 
                             <div>

@@ -253,6 +253,9 @@ document.addEventListener('alpine:init', () => {
                 if (!this.draft.Model['Model properties'].repository_analysis) {
                     this.draft.Model['Model properties'].repository_analysis = {};
                 }
+                if (!this.draft.Model['Model properties'].repository_analysis.contains_weights) {
+                    this.draft.Model['Model properties'].repository_analysis.contains_weights = 'n/a';
+                }
 
                 // Initialize nested objects if missing
                 if (!this.draft.Model['Model performance']) this.draft.Model['Model performance'] = { Comments: '' };
@@ -285,6 +288,11 @@ document.addEventListener('alpine:init', () => {
                     path: 'Model.Model properties.repository_analysis.demo_link',
                     old: this.model.card_data.Model['Model properties']?.repository_analysis?.demo_link,
                     new: this.draft.Model['Model properties'].repository_analysis.demo_link
+                },
+                {
+                    path: 'Model.Model properties.repository_analysis.contains_weights',
+                    old: this.model.card_data.Model['Model properties']?.repository_analysis?.contains_weights,
+                    new: this.draft.Model['Model properties'].repository_analysis.contains_weights
                 },
                 {
                     path: 'Model.Descriptors.References.0.PaperLink',
