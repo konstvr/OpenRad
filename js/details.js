@@ -1,0 +1,219 @@
+document.addEventListener('alpine:init', () => {
+    Alpine.data('detailsApp', () => ({
+        loading: true,
+        model: null,
+        user: null,
+        editMode: false,
+        draft: null,
+        severities: {},
+        copySuccess: false,
+
+        async init() {
+            // Theme check
+            if(localStorage.getItem('theme')==='dark') document.documentElement.classList.add('dark');
+            
+            // Auth check
+            const { data: { session } } = await sbClient.auth.getSession();
+            this.user = session?.user;
+
+            // Get ID from URL
+            const id = new URLSearchParams(window.location.search).get('id');
+            if(!id) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            // Fetch Model
+            const { data, error } = await sbClient.from('models').select('*').eq('id', id).single();
+            if(error || !data) {
+                alert("Model not found");
+                window.location.href = 'index.html';
+                return;
+            }
+            
+            this.model = data;
+            this.loading = false;
+        },
+
+        // --- UI HELPERS ---
+        hasData(str) { 
+            return str && str.trim().length > 0; 
+        },
+        
+        checkWeights() {
+            const r = this.model.card_data.Model['Model properties'].repository_analysis;
+            return r && (r.contains_weights === 'yes' || r.contains_weights === true);
+        },
+
+        getPrimaryModalities() {
+            if(!this.model) return [];
+            const content = this.model.card_data.Model.Indexing?.Content || [];
+            // Assumes MODALITY_CODES is defined in app.js
+            return content.filter(c => typeof MODALITY_CODES !== 'undefined' && MODALITY_CODES.includes(c));
+        },
+
+        getSubspecialties() {
+            if(!this.model) return [];
+            const content = this.model.card_data.Model.Indexing?.Content || [];
+            if (typeof MODALITY_CODES === 'undefined' || typeof FULL_MAPPING === 'undefined') return content;
+            
+            const specialties = content.filter(c => !MODALITY_CODES.includes(c));
+            return specialties.map(s => FULL_MAPPING[s] || s);
+        },
+
+        getUseAsArray(val) {
+            if (!val) return [];
+            if (Array.isArray(val)) return val;
+            return [val]; 
+        },
+
+        getPaperLink() {
+            const refs = this.model.card_data.Model.Descriptors?.References;
+            if(refs && refs.length > 0 && refs[0].DOI) {
+                return 'https://doi.org/' + refs[0].DOI;
+            }
+            return null;
+        },
+
+        getDemoLink() {
+            if (!this.model) return null;
+            const m = this.model.card_data;
+            
+            // 1. Try Deep Path
+            let link = m.Model?.['Model properties']?.repository_analysis?.demo_link;
+            
+            // 2. Fallback to Legacy/Root Paths
+            if (!link) link = m.demo_link || m.Model?.demo_link;
+            
+            // 3. Strict Validation (must be http/https)
+            if (typeof link === 'string' && /^https?:\/\//i.test(link.trim())) {
+                return link.trim();
+            }
+            return null;
+        },
+
+        // --- ACTIONS ---
+        downloadJson() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.model.card_data, null, 4));
+            const a = document.createElement('a');
+            a.href = dataStr;
+            a.download = (this.model.card_data.Model.Name.replace(/[^a-z0-9]/gi, '_').toLowerCase()) + "_card.json";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        },
+
+        async copyToClipboard() {
+            try {
+                // Construct Clean Schema
+                const cleanData = {
+                    Model: {
+                        Name: this.model.card_data.Model.Name,
+                        Link: this.model.card_data.Model.Link,
+                        "Model properties": {
+                            Architecture: this.model.card_data.Model['Model properties'].Architecture,
+                            Dataset: this.model.card_data.Model['Model properties'].Dataset,
+                            "Indications for use": this.model.card_data.Model['Model properties']['Indications for use'],
+                            Limitations: this.model.card_data.Model['Model properties'].Limitations,
+                            Use: this.model.card_data.Model['Model properties'].Use,
+                            Validation: this.model.card_data.Model['Model properties'].Validation,
+                            "Regulatory information": {
+                                Comment: this.model.card_data.Model['Model properties']['Regulatory information']?.Comment || ""
+                            }
+                        },
+                        "Model performance": {
+                            Comments: this.model.card_data.Model['Model performance']?.Comments || ""
+                        }
+                    }
+                };
+
+                const jsonStr = JSON.stringify(cleanData, null, 4);
+                await navigator.clipboard.writeText(jsonStr);
+                
+                this.copySuccess = true;
+                setTimeout(() => { this.copySuccess = false; }, 2000);
+            } catch (err) {
+                console.error(err);
+                alert("Failed to copy: " + err.message);
+            }
+        },
+
+        // --- EDIT LOGIC ---
+        toggleEdit() {
+            this.editMode = !this.editMode;
+            if(this.editMode) {
+                this.draft = JSON.parse(JSON.stringify(this.model.card_data));
+                this.severities = {};
+                
+                // [FIX] Ensure nested structure exists for Demo Link
+                if(!this.draft.Model['Model properties']) this.draft.Model['Model properties'] = {};
+                if(!this.draft.Model['Model properties'].repository_analysis) {
+                    this.draft.Model['Model properties'].repository_analysis = {};
+                }
+
+                // Initialize nested objects if missing
+                if(!this.draft.Model['Model performance']) this.draft.Model['Model performance'] = { Comments: '' };
+                if(!this.draft.Model['Model properties']) this.draft.Model['Model properties'] = {};
+                if(!this.draft.Model['Model properties']['Regulatory information']) this.draft.Model['Model properties']['Regulatory information'] = { Comment: '' };
+
+                // Sanitize Use Case (Filter invalid options)
+                const validOptions = ['Classification', 'Detection', 'Segmentation', 'Foundation', 'LLM', 'Generative', 'Other'];
+                let currentUse = this.draft.Model['Model properties'].Use;
+                let asArray = Array.isArray(currentUse) ? currentUse : (currentUse ? [currentUse] : []);
+                this.draft.Model['Model properties'].Use = asArray.filter(item => validOptions.includes(item));
+            }
+        },
+
+        async saveChanges() {
+            if (!this.user) return;
+
+            const fields = [
+                { path: 'Model.Name', old: this.model.card_data.Model.Name, new: this.draft.Model.Name },
+                { path: 'Model.Link', old: this.model.card_data.Model.Link, new: this.draft.Model.Link },
+                { 
+                    path: 'Model.Model properties.repository_analysis.demo_link', 
+                    old: this.model.card_data.Model['Model properties']?.repository_analysis?.demo_link, 
+                    new: this.draft.Model['Model properties'].repository_analysis.demo_link 
+                },
+                { path: 'Model.Model properties.Architecture', old: this.model.card_data.Model['Model properties'].Architecture, new: this.draft.Model['Model properties'].Architecture },
+                { path: 'Model.Model properties.Dataset', old: this.model.card_data.Model['Model properties'].Dataset, new: this.draft.Model['Model properties'].Dataset },
+                { path: 'Model.Model properties.Indications for use', old: this.model.card_data.Model['Model properties']['Indications for use'], new: this.draft.Model['Model properties']['Indications for use'] },
+                { path: 'Model.Model performance.Comments', old: this.model.card_data.Model['Model performance']?.Comments, new: this.draft.Model['Model performance']?.Comments },
+                { path: 'Model.Model properties.Limitations', old: this.model.card_data.Model['Model properties'].Limitations, new: this.draft.Model['Model properties'].Limitations },
+                { path: 'Model.Model properties.Use', old: this.model.card_data.Model['Model properties'].Use, new: this.draft.Model['Model properties'].Use },
+                { path: 'Model.Model properties.Validation', old: this.model.card_data.Model['Model properties'].Validation, new: this.draft.Model['Model properties'].Validation },
+                { path: 'Model.Model properties.Regulatory information.Comment', old: this.model.card_data.Model['Model properties']['Regulatory information']?.Comment, new: this.draft.Model['Model properties']['Regulatory information']?.Comment }
+            ];
+
+            for (const f of fields) {
+                // Stringify for robust comparison (handles arrays/objects)
+                if (JSON.stringify(f.old) !== JSON.stringify(f.new)) {
+                    await sbClient.from('model_edits').insert({
+                        model_id: this.model.id,
+                        user_id: this.user.id,
+                        field_path: f.path,
+                        old_value: JSON.stringify(f.old) || '',
+                        new_value: JSON.stringify(f.new) || '',
+                        severity: this.severities[f.path] || 'minor'
+                    });
+                }
+            }
+
+            const { error } = await sbClient.from('models').update({
+                card_data: this.draft,
+                is_verified: true,
+                verified_by: this.user.id,
+                verification_date: new Date()
+            }).eq('id', this.model.id);
+            
+            if(!error) {
+                this.model.card_data = this.draft;
+                this.model.is_verified = true;
+                this.editMode = false;
+                alert('Verified & Saved!');
+            } else {
+                alert('Save failed: ' + error.message);
+            }
+        }
+    }));
+});
