@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenRad - AI Model Registry</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { slate: { 850: '#1e293b', 900: '#0f172a' }, violet: { 500: '#8b5cf6', 600: '#7c3aed' } },
+                    animation: { 'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite' }
+                }
+            }
+        }
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Inter', sans-serif; } [x-cloak] { display: none !important; } .custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 3px; } .dark .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #475569; } </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300"
+      x-data="dashboardApp()" x-init="initApp()"
+      @scroll.window.throttle.200ms="handleScroll()">
+
+    <script src="js/app.js"></script>
+    <script src="js/charts.js"></script>
+
+    <div class="min-h-screen flex flex-col">
+
+        <header class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 transition-colors duration-300">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="relative w-8 h-8 flex items-center justify-center">
+                        <div class="absolute inset-0 bg-gradient-to-tr from-blue-600 to-violet-600 rounded-lg shadow-lg opacity-100"></div>
+                        <span class="relative text-white font-bold text-sm">OR</span>
+                    </div>
+                    <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">OpenRad</h1>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <template x-if="!$store.auth.user">
+                        <button @click="$store.auth.modalOpen = true" class="text-sm font-medium hover:text-violet-500">Log In</button>
+                    </template>
+
+                    <template x-if="$store.auth.user">
+                        <div class="flex items-center gap-3">
+                            <a href="profile.html" class="flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                My Dashboard
+                            </a>
+
+                            <a href="submit.html" class="hidden md:inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                Submit Model
+                            </a>
+                            <button @click="$store.auth.logout()" class="text-xs font-bold text-red-500 hover:underline">Log Out</button>
+                        </div>
+                    </template>
+
+                    <button @click="toggleTheme()" class="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 transition focus:outline-none">
+                        <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                        <svg x-show="darkMode" x-cloak class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+            
+            <div x-show="!$store.auth.user && !loading" class="text-center py-20" x-cloak>
+                <div class="p-4 bg-slate-100 dark:bg-slate-800 rounded-full inline-block mb-4">
+                    <svg class="w-12 h-12 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Private Repository</h2>
+                <p class="text-slate-500 mt-2">Please login to access the verified database.</p>
+                <button @click="$store.auth.modalOpen = true" class="mt-6 px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-lg transition shadow-lg">Login to Access</button>
+            </div>
+
+            <div x-show="$store.auth.user" x-cloak>
+                
+                <div class="flex items-center gap-4 mb-6 border-b border-slate-200 dark:border-slate-700 pb-4">
+                    <button @click="currentTab = 'browse'" :class="currentTab === 'browse' ? 'text-violet-600 dark:text-violet-400 border-b-2 border-violet-600' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'" class="pb-1 px-1 font-medium transition">Browse Models</button>
+                    <button @click="currentTab = 'stats'; updateCharts()" :class="currentTab === 'stats' ? 'text-violet-600 dark:text-violet-400 border-b-2 border-violet-600' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'" class="pb-1 px-1 font-medium transition">Statistics</button>
+                </div>
+
+                <div x-show="currentTab === 'browse'" class="flex flex-col md:flex-row gap-8">
+                    
+                    <aside class="w-full md:w-64 flex-shrink-0 space-y-6">
+                        
+                        <div class="relative group z-10">
+                            <div class="absolute -inset-0.5 bg-gradient-to-r from-blue-500 via-violet-500 to-purple-600 rounded-xl blur opacity-25 group-hover:opacity-60 transition duration-500"></div>
+                            <div class="relative flex items-center bg-white dark:bg-slate-800 rounded-xl shadow-sm">
+                                <div class="pl-3.5 text-violet-500 dark:text-violet-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
+                                <input x-model="searchQuery" type="text" placeholder="Search..." class="w-full pl-3 pr-12 py-3 bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none">
+                            </div>
+                        </div>
+
+                        <div x-show="isFiltered" class="text-center" x-transition>
+                            <button @click="resetFilters()" class="text-xs font-bold text-red-500 hover:text-red-600 flex items-center justify-center gap-1 w-full p-2 border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 rounded-lg transition">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                Clear All Filters
+                            </button>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label class="flex items-center justify-between p-2.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-violet-300 transition">
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Verified Only</span>
+                                <input type="checkbox" x-model="filterVerified" class="w-4 h-4 text-violet-600 rounded">
+                            </label>
+                            <label class="flex items-center justify-between p-2.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-green-300 transition">
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Weights Available</span>
+                                <input type="checkbox" x-model="filterWeights" class="w-4 h-4 text-green-600 rounded">
+                            </label>
+                            <label class="flex items-center justify-between p-2.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-300 transition">
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Interactive Demo</span>
+                                <input type="checkbox" x-model="filterDemo" class="w-4 h-4 text-blue-600 rounded">
+                            </label>
+                        </div>
+
+                        <div class="space-y-6">
+                            <template x-for="filter in [{title: 'Modality', items: availableModalities, model: 'selectedModalities'}, {title: 'Use Case', items: availableUses, model: 'selectedUses'}, {title: 'Subspecialty', items: availableSpecialties, model: 'selectedSpecialties'}]">
+                                <div>
+                                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3" x-text="filter.title"></h3>
+                                    <div class="space-y-1 max-h-40 overflow-y-auto custom-scrollbar pr-2">
+                                        <template x-for="item in filter.items" :key="item">
+                                            <label class="flex items-center gap-2 cursor-pointer p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition">
+                                                <input type="checkbox" :value="item" @change="toggleFilter(filter.model, item)" :checked="getFilterArray(filter.model).includes(item)" class="w-4 h-4 text-violet-600 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-700 focus:ring-violet-500">
+                                                <span class="text-sm text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white" x-text="codeMap[item] || item"></span>
+                                                <span class="text-[10px] text-slate-400 ml-auto" x-text="getCount(item, filter.title)"></span>
+                                            </label>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </aside>
+
+                    <div class="flex-1">
+                        <div class="flex justify-between items-end mb-4 px-1">
+                            <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">Results</h2>
+                            <span class="text-xs font-bold bg-violet-100 text-violet-700 px-2 py-1 rounded-full" 
+                                x-text="filteredModels.length + ' Models Found'">
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            
+                            <template x-for="item in visibleModels" :key="item.id">
+                                <div @click="goToDetails(item.id)" class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-violet-500 cursor-pointer transition relative group h-full flex flex-col hover:shadow-lg">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <h3 class="font-bold text-slate-900 dark:text-white group-hover:text-violet-500 transition line-clamp-2" x-text="item.card_data.Model.Name"></h3>
+                                    </div>
+                                    
+                                    <div class="flex flex-wrap gap-2 mb-3">
+                                        <template x-if="item.is_verified">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 border border-green-200 flex items-center gap-1">
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Verified
+                                            </span>
+                                        </template>
+                                        
+                                        <template x-if="checkWeights(item.card_data)">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">Weights</span>
+                                        </template>
+
+                                        <template x-if="checkDemo(item.card_data)">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200 flex items-center gap-1">
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> 
+                                                Demo
+                                            </span>
+                                        </template>
+                                        
+                                        <template x-for="use in (Array.isArray(item.card_data.Model['Model properties'].Use) ? item.card_data.Model['Model properties'].Use : [item.card_data.Model['Model properties'].Use || 'Other'])">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600" x-text="use"></span>
+                                        </template>
+
+                                        <template x-for="mod in getModalities(item)">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-500 border border-amber-200 dark:border-amber-800" x-text="mod"></span>
+                                        </template>
+
+                                        <template x-for="spec in getSpecialties(item)">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-100 dark:border-blue-800" x-text="spec"></span>
+                                        </template>
+                                    </div>
+                                    
+                                    <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-3 mb-4 flex-1" x-text="item.card_data.Model['Model properties']['Indications for use']"></p>
+                                </div>
+                            </template>
+                        </div>
+
+                        <div x-show="!loading && filteredModels.length === 0" class="text-center py-20 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 text-slate-500">
+                            No models found matching your criteria.
+                        </div>
+
+                        <div x-show="visibleModels.length < filteredModels.length" class="text-center py-8 text-sm text-slate-400 animate-pulse">
+                            Loading more models...
+                        </div>
+                    </div>
+                </div>
+
+                <div x-show="currentTab === 'stats'" x-cloak class="space-y-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm"><h3 class="text-sm font-bold text-slate-500 uppercase mb-4">Distribution by Modality</h3><div class="h-64 relative"><canvas id="modalityChart"></canvas></div></div>
+                        <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm"><h3 class="text-sm font-bold text-slate-500 uppercase mb-4">Weights Availability</h3><div class="h-64 relative"><canvas id="weightsChart"></canvas></div></div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm"><h3 class="text-sm font-bold text-slate-500 uppercase mb-4">Distribution by Subspecialty</h3><div class="h-80 relative"><canvas id="specialtyChart"></canvas></div></div>
+                        <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm"><h3 class="text-sm font-bold text-slate-500 uppercase mb-4">Validation Status</h3><div class="h-64 relative"><canvas id="validationChart"></canvas></div></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <div x-show="$store.auth.modalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm" x-cloak @click="$store.auth.modalOpen = false">
+            <div class="relative bg-white dark:bg-slate-800 p-8 rounded-xl shadow-xl w-96 border border-slate-200 dark:border-slate-700" @click.stop>
+                <h3 class="text-xl font-bold mb-4 dark:text-white">Login Required</h3>
+                <div class="mb-3">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
+                    <input type="email" x-model="$store.auth.email" placeholder="name@example.com" class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Password</label>
+                    <input type="password" x-model="$store.auth.password" placeholder="••••••••" class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500" @keyup.enter="$store.auth.handleAuth()">
+                </div>
+                <button @click="$store.auth.handleAuth()" class="w-full bg-violet-600 text-white py-2 rounded font-bold hover:bg-violet-700 transition mb-4">Log In</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

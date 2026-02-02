@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Model Details - OpenRad</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { 
+            darkMode: 'class', 
+            theme: { 
+                extend: { 
+                    colors: { slate: { 850: '#1e293b', 900: '#0f172a' }, violet: { 500: '#8b5cf6', 600: '#7c3aed' }, amber: { 500: '#f59e0b', 600: '#d97706' } } 
+                } 
+            } 
+        }
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>body{font-family:'Inter',sans-serif}[x-cloak]{display:none !important}</style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
+
+    <script src="js/app.js"></script>
+    <script src="js/details.js"></script>
+
+    <div x-data="detailsApp" class="max-w-6xl mx-auto px-4 py-8">
+        
+        <div class="mb-6 flex justify-between items-center">
+            <a href="index.html" class="text-sm font-medium text-slate-500 hover:text-violet-600 flex items-center gap-1 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg> 
+                Back to Overview
+            </a>
+            <div class="flex gap-3" x-show="$store.auth.user" x-cloak>
+                <a href="profile.html" class="px-4 py-2 rounded-lg font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                    My Dashboard
+                </a>
+                <button @click="toggleEdit()" class="px-4 py-2 rounded-lg font-bold transition text-sm shadow-sm flex items-center gap-2" :class="editMode ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-violet-600 text-white hover:bg-violet-700'">
+                    <svg x-show="!editMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    <span x-text="editMode ? 'Cancel Edit' : 'Verify & Edit'"></span>
+                </button>
+            </div>
+        </div>
+
+        <div x-show="loading" class="text-center py-20">
+            <svg class="animate-spin h-8 w-8 text-violet-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <span class="text-slate-500">Loading Model...</span>
+        </div>
+
+        <template x-if="!loading && model && model.card_data">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                
+                <div class="p-8 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                    <div class="flex flex-col lg:flex-row justify-between items-start gap-6">
+                        <div class="flex-1">
+                            <div class="flex flex-wrap items-center gap-3 mb-3">
+                                <span x-show="model.is_verified" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200 flex items-center gap-1">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Verified
+                                </span>
+                                <span x-show="!model.is_verified" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200">Unverified</span>
+                                
+                                <template x-for="use in getUseAsArray(model.card_data.Model['Model properties'].Use)">
+                                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 uppercase tracking-wide" x-text="use"></span>
+                                </template>
+
+                                <template x-for="mod in getPrimaryModalities()">
+                                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500 border border-amber-200 dark:border-amber-800 uppercase tracking-wide" x-text="mod"></span>
+                                </template>
+                            </div>
+                            <h1 class="text-3xl font-bold text-slate-900 dark:text-white leading-tight" x-text="model.card_data.Model.Name"></h1>
+                        </div>
+                        
+                        <div class="flex flex-wrap items-center gap-2 shrink-0">
+                            <template x-if="getPaperLink()">
+                                <a :href="getPaperLink()" target="_blank" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-sm flex items-center gap-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path></svg> Paper
+                                </a>
+                            </template>
+
+                            <template x-if="getDemoLink()">
+                                <a :href="getDemoLink()" target="_blank" class="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 transition shadow-sm flex items-center gap-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> 
+                                    Demo
+                                </a>
+                            </template>
+
+                            <template x-if="model.card_data.Model.Link">
+                                <a :href="model.card_data.Model.Link" target="_blank" class="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-900 transition shadow-sm flex items-center gap-2">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg> 
+                                    GitHub
+                                </a>
+                            </template>
+                            
+                            <button @click="copyToClipboard()" class="p-2 border border-slate-300 bg-white text-slate-700 rounded-lg hover:bg-slate-50 transition shadow-sm relative overflow-hidden w-10 h-10 flex items-center justify-center" title="Copy Card JSON">
+                                <svg x-show="!copySuccess" class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                                <svg x-show="copySuccess" x-cloak class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            </button>
+
+                            <button @click="downloadJson()" class="p-2 border border-slate-300 bg-white text-slate-700 rounded-lg hover:bg-slate-50 transition shadow-sm" title="Download Full JSON">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div x-show="!editMode" class="p-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
+                        
+                        <div class="space-y-8">
+                            
+                            <div x-show="hasData(model.card_data.Model['Model properties']['Indications for use'])">
+                                <h3 class="text-xs font-bold uppercase text-slate-400 mb-2 flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg> Indications For Use
+                                </h3>
+                                <p class="text-slate-800 dark:text-slate-200 text-sm leading-relaxed" x-text="model.card_data.Model['Model properties']['Indications for use']"></p>
+                            </div>
+
+                            <div x-show="hasData(model.card_data.Model['Model properties'].Architecture)">
+                                <h3 class="text-xs font-bold uppercase text-slate-400 mb-2 flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg> Architecture
+                                </h3>
+                                <p class="text-sm font-mono bg-slate-100 dark:bg-slate-700/50 px-3 py-1.5 rounded-lg inline-block text-slate-700 dark:text-slate-300" x-text="model.card_data.Model['Model properties'].Architecture"></p>
+                            </div>
+
+                            <div x-show="model.card_data.Model.Imaging && model.card_data.Model.Imaging.Modalities && model.card_data.Model.Imaging.Modalities.length > 0">
+                                <h3 class="text-xs font-bold uppercase text-slate-400 mb-2 flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg> Imaging Modality Details
+                                </h3>
+                                <div class="flex flex-wrap gap-2">
+                                    <template x-for="mod in model.card_data.Model.Imaging.Modalities">
+                                        <span class="text-xs font-bold px-2 py-1 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded border border-blue-100 dark:border-blue-800" x-text="mod"></span>
+                                    </template>
+                                </div>
+                            </div>
+                            
+                            <div x-show="getSubspecialties().length > 0">
+                                <h3 class="text-xs font-bold uppercase text-slate-400 mb-2 flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg> Subspecialty
+                                </h3>
+                                <div class="flex flex-wrap gap-2">
+                                    <template x-for="spec in getSubspecialties()">
+                                        <span class="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 rounded" x-text="spec"></span>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-8">
+                            
+                            <div x-show="model.card_data.Model['Model performance'] && hasData(model.card_data.Model['Model performance'].Comments)">
+                                <h3 class="text-xs font-bold uppercase text-slate-400 mb-2 flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg> Performance
+                                </h3>
+                                <div class="bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 rounded-xl p-4">
+                                    <p class="text-sm font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed" x-text="model.card_data.Model['Model performance'].Comments"></p>
+                                </div>
+                            </div>
+
+                            <div x-show="hasData(model.card_data.Model['Model properties'].Dataset)">
+                                <h3 class="text-xs font-bold uppercase text-slate-400 mb-2 flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg> Dataset
+                                </h3>
+                                <p class="text-sm text-slate-700 dark:text-slate-300" x-text="model.card_data.Model['Model properties'].Dataset"></p>
+                            </div>
+
+                            <div x-show="hasData(model.card_data.Model['Model properties'].Validation)">
+                                <h3 class="text-xs font-bold uppercase text-slate-400 mb-2 flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Validation
+                                </h3>
+                                <p class="text-sm text-slate-700 dark:text-slate-300" x-text="model.card_data.Model['Model properties'].Validation"></p>
+                            </div>
+
+                            <div x-show="hasData(model.card_data.Model['Model properties'].Limitations)">
+                                <h3 class="text-xs font-bold uppercase text-slate-400 mb-2 flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Limitations
+                                </h3>
+                                <div class="bg-red-50 dark:bg-red-900/10 border-l-4 border-red-400 p-3 rounded-r">
+                                    <p class="text-xs text-red-700 dark:text-red-300 italic" x-text="model.card_data.Model['Model properties'].Limitations"></p>
+                                </div>
+                            </div>
+
+                            <div x-show="model.card_data.Model['Model properties']['Regulatory information'] && hasData(model.card_data.Model['Model properties']['Regulatory information'].Comment)">
+                                <h3 class="text-xs font-bold uppercase text-slate-400 mb-2 flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"></path></svg> Regulatory Info
+                                </h3>
+                                <p class="text-sm text-slate-700 dark:text-slate-300 italic" x-text="model.card_data.Model['Model properties']['Regulatory information'].Comment"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <template x-if="editMode && draft">
+                    <div class="p-8 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700">
+                        <div class="mb-6 p-4 bg-blue-50 text-blue-800 rounded-lg text-sm border border-blue-100 flex items-center gap-3">
+                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span><strong>Verification Mode:</strong> Correct any fields below. Use the "Severity" dropdown to log the importance of your changes.</span>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            
+                            <div>
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Model Name</label>
+                                    <select x-model="severities['Model.Name']" class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <input type="text" x-model="draft.Model.Name" class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Repository Link</label>
+                                    <select x-model="severities['Model.Link']" class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <input type="text" x-model="draft.Model.Link" class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Demo Link</label>
+                                    <select x-model="severities['Model.Model properties.repository_analysis.demo_link']" class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <input type="text" x-model="draft.Model['Model properties'].repository_analysis.demo_link" placeholder="https://huggingface.co/..." class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Architecture</label>
+                                    <select x-model="severities['Model.Model properties.Architecture']" class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <input type="text" x-model="draft.Model['Model properties'].Architecture" class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Dataset</label>
+                                    <select x-model="severities['Model.Model properties.Dataset']" class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <input type="text" x-model="draft.Model['Model properties'].Dataset" class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Indications for Use</label>
+                                    <select x-model="severities['Model.Model properties.Indications for use']" class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <textarea x-model="draft.Model['Model properties']['Indications for use']" rows="3" class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Performance Metrics</label>
+                                    <select x-model="severities['Model.Model performance.Comments']" class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <textarea x-model="draft.Model['Model performance'].Comments" rows="3" class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Limitations</label>
+                                    <select x-model="severities['Model.Model properties.Limitations']" class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <textarea x-model="draft.Model['Model properties'].Limitations" rows="3" class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <div class="flex justify-between items-end mb-2">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Use Cases (Select all that apply)</label>
+                                    <select x-model="severities['Model.Model properties.Use']" class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <div class="flex flex-wrap gap-3">
+                                    <template x-for="option in ['Classification', 'Detection', 'Segmentation', 'Foundation', 'LLM', 'Generative', 'Other']">
+                                        <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+                                            <input type="checkbox" :value="option" x-model="draft.Model['Model properties'].Use" class="w-4 h-4 text-violet-600 rounded border-slate-300 dark:border-slate-500 focus:ring-violet-500">
+                                            <span class="text-sm text-slate-700 dark:text-slate-300" x-text="option"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Validation</label>
+                                    <select x-model="severities['Model.Model properties.Validation']" class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <select x-model="draft.Model['Model properties'].Validation" class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                                    <option value="">Select Validation Status...</option>
+                                    <option value="internal">internal</option>
+                                    <option value="external">external</option>
+                                    <option value="n/a">n/a</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Regulatory Info</label>
+                                    <select x-model="severities['Model.Model properties.Regulatory information.Comment']" class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <input type="text" x-model="draft.Model['Model properties']['Regulatory information'].Comment" class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                            </div>
+
+                        </div>
+
+                        <div class="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
+                            <button @click="toggleEdit()" class="px-6 py-2.5 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition">Cancel</button>
+                            <button @click="saveChanges()" class="px-6 py-2.5 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-lg transition flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                                Save & Verify
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+            </div>
+        </template>
+    </div>
+</body>
+</html>

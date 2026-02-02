@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Reviewer Dashboard - OpenRad</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { 
+            darkMode: 'class', 
+            theme: { 
+                extend: { 
+                    colors: { slate: { 850: '#1e293b', 900: '#0f172a' }, violet: { 500: '#8b5cf6', 600: '#7c3aed' }, gold: { 400: '#fbbf24', 500: '#f59e0b' } },
+                    animation: { 'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite' }
+                } 
+            } 
+        }
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body{font-family:'Inter',sans-serif}
+        [x-cloak]{display:none !important}
+        .gold-gradient { background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 50%, #d97706 100%); }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
+
+    <script src="js/app.js"></script>
+
+    <div x-data="profileApp()" x-init="init()" class="max-w-5xl mx-auto px-4 py-8">
+        
+        <div class="flex justify-between items-center mb-8 border-b border-slate-200 dark:border-slate-700 pb-4">
+            <div class="flex items-center gap-3">
+                <a href="index.html" class="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-violet-600 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    Back to Overview
+                </a>
+                <h1 class="text-2xl font-bold">Reviewer Dashboard</h1>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <div class="text-right hidden sm:block">
+                    <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">Reviewer</p>
+                    <p class="text-sm font-bold text-violet-600" x-text="user?.user_metadata?.full_name || user?.email"></p>
+                </div>
+                
+                <button @click="passwordModalOpen = true" class="p-2 text-slate-400 hover:text-violet-600 transition" title="Change Password">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                </button>
+
+                <div class="h-6 w-px bg-slate-300 dark:bg-slate-700 mx-2"></div>
+
+                <button @click="logout()" class="text-xs font-bold text-red-500 hover:underline">Log Out</button>
+            </div>
+        </div>
+
+        <div x-show="loading" class="text-center py-20">Loading profile...</div>
+
+        <div x-show="!loading && user" x-cloak class="space-y-8">
+
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-64 h-64 bg-violet-500/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+                <div class="relative z-10 flex flex-col md:flex-row items-center gap-8">
+                    <div class="shrink-0">
+                        <div class="w-24 h-24 rounded-full flex items-center justify-center text-4xl shadow-inner" :class="rank.bgClass">
+                            <span x-text="rank.icon"></span>
+                        </div>
+                    </div>
+                    <div class="flex-1 w-full">
+                        <div class="flex justify-between items-end mb-2">
+                            <div>
+                                <h2 class="text-sm font-bold uppercase text-slate-500 tracking-wider">Current Rank</h2>
+                                <h3 class="text-3xl font-bold" :class="rank.textClass" x-text="rank.title"></h3>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-3xl font-bold text-slate-900 dark:text-white" x-text="stats.verified"></span>
+                                <span class="text-sm text-slate-500">/ 300 Cards</span>
+                            </div>
+                        </div>
+                        <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-4 overflow-hidden shadow-inner">
+                            <div class="h-full transition-all duration-1000 ease-out relative" 
+                                :class="rank.barClass" 
+                                :style="`width: ${Math.min((stats.verified / 300) * 100, 100)}%`"> <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
+                            </div>
+                        </div>
+                        <p class="mt-3 text-xs text-slate-500 italic text-center md:text-left" x-text="rank.message"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="md:col-span-2">
+                    <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> Current Mission
+                    </h3>
+
+                    <template x-if="activeTask">
+                        <div class="bg-white dark:bg-slate-800 rounded-xl border-l-4 border-violet-500 shadow-md p-6 relative overflow-hidden group">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span class="inline-block px-2 py-1 mb-2 text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 rounded">Assigned to you</span>
+                                    <h4 class="text-xl font-bold text-slate-900 dark:text-white mb-2" x-text="activeTask.card_data.Model.Name"></h4>
+                                    <p class="text-sm text-slate-500 line-clamp-2 mb-4" x-text="activeTask.card_data.Model['Model properties']['Indications for use']"></p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex gap-3">
+                                <button @click="continueMission()" class="flex-1 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-lg transition shadow-lg flex items-center justify-center gap-2">
+                                    Verify Now <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                                </button>
+                                
+                                <button @click="skipMission()" class="px-4 py-3 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-bold rounded-lg hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition" title="Release this task">
+                                    Skip
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template x-if="!activeTask">
+                        <div class="bg-slate-50 dark:bg-slate-800/50 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-8 text-center">
+                            <div class="inline-block p-3 bg-slate-200 dark:bg-slate-700 rounded-full mb-4">
+                                <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            </div>
+                            <h4 class="text-lg font-bold text-slate-700 dark:text-slate-300">
+                                Ready for a new card, <span class="text-violet-600" x-text="displayName"></span>?
+                            </h4>
+                            <p class="text-sm text-slate-500 mb-6">Click below to claim the next unverified model from the queue.</p>
+                            <button @click="getNewMission()" class="px-8 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-lg hover:shadow-xl transition hover:scale-105 transform">Get New Mission</button>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="md:col-span-1">
+                    <h3 class="text-lg font-bold mb-4">Your Impact</h3>
+                    <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-4">
+                        <div class="flex items-center gap-4">
+                            <div class="p-3 bg-green-100 text-green-600 rounded-lg"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                            <div><p class="text-2xl font-bold dark:text-white" x-text="stats.verified"></p><p class="text-xs text-slate-500 uppercase font-bold">Verified</p></div>
+                        </div>
+                        <div class="h-px bg-slate-100 dark:bg-slate-700"></div>
+                        <div class="flex items-center gap-4">
+                            <div class="p-3 bg-blue-100 text-blue-600 rounded-lg"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></div>
+                            <div><p class="text-2xl font-bold dark:text-white" x-text="stats.edits"></p><p class="text-xs text-slate-500 uppercase font-bold">Edits Made</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-lg font-bold mb-4">Verified History</h3>
+                <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-xs uppercase text-slate-500">
+                            <tr><th class="px-6 py-3">Model Name</th><th class="px-6 py-3">Date Verified</th><th class="px-6 py-3 text-right">Status</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                            <template x-for="item in history" :key="item.id">
+                                <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition">
+                                    <td class="px-6 py-3 font-medium dark:text-white" x-text="item.card_data.Model.Name"></td>
+                                    <td class="px-6 py-3 text-slate-500" x-text="new Date(item.verification_date).toLocaleDateString()"></td>
+                                    <td class="px-6 py-3 text-right"><span class="inline-flex items-center gap-1 text-green-600 font-bold text-xs"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Done</span></td>
+                                </tr>
+                            </template>
+                            <tr x-show="history.length === 0"><td colspan="3" class="px-6 py-8 text-center text-slate-500">No models verified yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="passwordModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm" x-cloak>
+            <div class="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-xl w-96 border border-slate-200 dark:border-slate-700">
+                <h3 class="text-xl font-bold mb-4 dark:text-white">Change Password</h3>
+                
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">New Password</label>
+                    <input type="password" x-model="newPassword" class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Confirm Password</label>
+                    <input type="password" x-model="confirmPassword" class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500">
+                </div>
+
+                <div class="flex gap-2">
+                    <button @click="changePassword()" class="flex-1 bg-violet-600 text-white py-2 rounded font-bold hover:bg-violet-700 transition">Update</button>
+                    <button @click="passwordModalOpen = false; newPassword=''; confirmPassword=''" class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-bold hover:bg-slate-300 dark:hover:bg-slate-600 transition">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function profileApp() {
+            return {
+                user: null,
+                loading: true,
+                activeTask: null,
+                history: [],
+                stats: { verified: 0, edits: 0 },
+                rank: {},
+                
+                // Password Modal State
+                passwordModalOpen: false,
+                newPassword: '',
+                confirmPassword: '',
+
+                get displayName() {
+                    if (this.user?.user_metadata?.full_name) {
+                        return this.user.user_metadata.full_name.split(' ')[0];
+                    }
+                    return 'Reviewer';
+                },
+
+                async init() {
+                    if(localStorage.getItem('theme')==='dark') document.documentElement.classList.add('dark');
+                    const { data: { session } } = await sbClient.auth.getSession();
+                    this.user = session?.user;
+
+                    if (!this.user) {
+                        window.location.href = 'index.html'; 
+                        return;
+                    }
+
+                    await this.loadProfileData();
+                    
+                    // --- DEV MODE: UNCOMMENT TO TEST BADGES ---
+                    // this.stats.verified = 55; // Test "Senior Contributor"
+                    // this.stats.verified = 205; // Test "Co-Author"
+                    
+                    this.updateRank();
+                    this.loading = false;
+                },
+
+                async changePassword() {
+                    if (this.newPassword.length < 6) {
+                        alert("Password must be at least 6 characters.");
+                        return;
+                    }
+                    if (this.newPassword !== this.confirmPassword) {
+                        alert("Passwords do not match.");
+                        return;
+                    }
+
+                    const { error } = await sbClient.auth.updateUser({ password: this.newPassword });
+
+                    if (error) {
+                        alert("Error updating password: " + error.message);
+                    } else {
+                        alert("Password updated successfully!");
+                        this.passwordModalOpen = false;
+                        this.newPassword = '';
+                        this.confirmPassword = '';
+                    }
+                },
+
+                async loadProfileData() {
+                    const { data: active } = await sbClient.from('models').select('*').eq('assigned_to', this.user.id).eq('is_verified', false).limit(1);
+                    this.activeTask = active && active.length > 0 ? active[0] : null;
+
+                    const { data: hist } = await sbClient.from('models').select('*').eq('verified_by', this.user.id).eq('is_verified', true).order('verification_date', { ascending: false });
+                    this.history = hist || [];
+                    this.stats.verified = this.history.length;
+
+                    const { count } = await sbClient.from('model_edits').select('*', { count: 'exact', head: true }).eq('user_id', this.user.id);
+                    this.stats.edits = count || 0;
+                },
+
+                updateRank() {
+                    const count = this.stats.verified;
+                    // Changed threshold from 200 to 300
+                    if (count >= 300) {
+                        this.rank = { title: "Co-Author", icon: "🏆", textClass: "text-yellow-500", bgClass: "bg-yellow-100 text-yellow-600 gold-gradient text-white", barClass: "bg-yellow-500", message: "You are a legend! Your contribution will be recognized in the publication." };
+                    } else if (count >= 50) {
+                        // Updated message to calculate remaining based on 300
+                        this.rank = { title: "Senior Contributor", icon: "⚡", textClass: "text-blue-600", bgClass: "bg-blue-100 text-blue-600", barClass: "bg-blue-500", message: `Amazing work! Only ${300 - count} more to reach Co-Author status.` };
+                    } else {
+                        this.rank = { title: "Novice Reviewer", icon: "🌱", textClass: "text-green-600", bgClass: "bg-green-100 text-green-600", barClass: "bg-green-500", message: `Keep going! Reach 50 verifications to level up.` };
+                    }
+                },
+
+                /*async getNewMission() {
+                    const { data, error } = await sbClient.rpc('claim_next_task', { user_id: this.user.id });
+                    if (error) { alert("Error claiming task: " + error.message); return; }
+                    if (data) { this.activeTask = data; } 
+                    else { alert("No unverified models available right now! Great job clearing the queue!"); }
+                },
+
+
+                async skipMission() {
+                    if(!confirm("Release this card back to the queue?")) return;
+                    
+                    const skippedId = this.activeTask.id;
+                    this.loading = true; // Show loading state
+
+                    try {
+                        // 1. Release the current card (set assigned_to = NULL)
+                        const { error: releaseError } = await sbClient
+                            .from('models')
+                            .update({ assigned_to: null })
+                            .eq('id', skippedId);
+
+                        if(releaseError) throw releaseError;
+
+                        // 2. Immediately claim the NEXT card (excluding the one we just skipped)
+                        const { data: newTask, error: claimError } = await sbClient.rpc('claim_next_task', { 
+                            user_id: this.user.id,
+                            exclude_id: skippedId // <--- This prevents getting the same card back
+                        });
+
+                        if(claimError) throw claimError;
+
+                        if (newTask) {
+                            // Success! Swap the active task immediately
+                            this.activeTask = newTask;
+                        } else {
+                            // Queue is empty (except maybe the one we skipped)
+                            alert("No other cards available in the queue right now.");
+                            this.activeTask = null;
+                        }
+
+                    } catch (err) {
+                        console.error(err);
+                        alert("Error skipping task: " + err.message);
+                    } finally {
+                        this.loading = false;
+                    }
+                },*/
+
+                async getNewMission() {
+                    const { data, error } = await sbClient.rpc('claim_next_task', { user_id: this.user.id });
+                    if (error) { 
+                        alert("Error claiming task: " + error.message); 
+                        return; 
+                    }
+                    
+                    // FIX: Check for array length
+                    if (data && data.length > 0) { 
+                        this.activeTask = data[0]; 
+                    } else { 
+                        alert("No unverified models available right now! Great job clearing the queue!"); 
+                    }
+                },
+
+                continueMission() {
+                    if(this.activeTask) { window.location.href = `details.html?id=${this.activeTask.id}`; }
+                },
+
+                async skipMission() {
+                    if(!this.activeTask) return; // Safety check
+                    if(!confirm("Release this card back to the queue?")) return;
+                    
+                    const skippedId = this.activeTask.id;
+                    // Do NOT set loading=true here, strictly, because it hides the UI. 
+                    // Instead, we just wait for the swap.
+
+                    try {
+                        // 1. Release the current card
+                        const { error: releaseError } = await sbClient
+                            .from('models')
+                            .update({ assigned_to: null })
+                            .eq('id', skippedId);
+
+                        if(releaseError) throw releaseError;
+
+                        // 2. Claim the NEXT card
+                        // Note: The RPC returns an ARRAY (SETOF models)
+                        const { data, error: claimError } = await sbClient.rpc('claim_next_task', { 
+                            user_id: this.user.id,
+                            exclude_id: skippedId 
+                        });
+
+                        if(claimError) throw claimError;
+
+                        // 3. Handle Response
+                        // 'data' is an array like [{ id: "...", ... }] or []
+                        if (data && data.length > 0) {
+                            this.activeTask = data[0]; // Take the first item
+                        } else {
+                            alert("No other cards available in the queue right now.");
+                            this.activeTask = null;
+                        }
+
+                    } catch (err) {
+                        console.error(err);
+                        alert("Error skipping task: " + err.message);
+                    }
+                },
+
+                async logout() {
+                    await sbClient.auth.signOut();
+                    window.location.href = 'index.html';
+                }
+            }
+        }
+    </script>
+</body>
+</html>

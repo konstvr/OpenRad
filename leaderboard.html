@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Leaderboard - OpenRad</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { slate: { 850: '#1e293b', 900: '#0f172a' }, violet: { 500: '#8b5cf6', 600: '#7c3aed' }, gold: { 400: '#fbbf24', 500: '#f59e0b' } } } } }</script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>body{font-family:'Inter',sans-serif}[x-cloak]{display:none}</style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
+    <script src="js/app.js"></script>
+
+    <div x-data="leaderboardApp()" x-init="init()" class="max-w-4xl mx-auto px-4 py-8">
+        
+        <div class="mb-8 flex justify-between items-center">
+            <a href="profile.html" class="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-violet-600 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                Back to Dashboard
+            </a>
+            <h1 class="text-3xl font-bold">🏆 Hall of Fame</h1>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div class="p-6 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700">
+                <h2 class="text-lg font-bold">Top Contributors</h2>
+                <p class="text-sm text-slate-500">Rankings updated in real-time.</p>
+            </div>
+
+            <table class="w-full text-left">
+                <thead class="bg-slate-50 dark:bg-slate-900/30 text-xs uppercase text-slate-500 font-bold">
+                    <tr>
+                        <th class="px-6 py-4 w-20 text-center">Rank</th>
+                        <th class="px-6 py-4">Reviewer</th>
+                        <th class="px-6 py-4 text-right">Verified Models</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                    <template x-for="(entry, index) in leaders" :key="index">
+                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition">
+                            <td class="px-6 py-4 text-center">
+                                <template x-if="entry.rank === 1"><span class="text-2xl">🥇</span></template>
+                                <template x-if="entry.rank === 2"><span class="text-2xl">🥈</span></template>
+                                <template x-if="entry.rank === 3"><span class="text-2xl">🥉</span></template>
+                                <template x-if="entry.rank > 3"><span class="font-mono font-bold text-slate-400" x-text="entry.rank"></span></template>
+                            </td>
+                            <td class="px-6 py-4">
+                                <div class="font-bold text-slate-900 dark:text-white" x-text="entry.name"></div>
+                                <div class="text-xs text-slate-500" x-text="getRankTitle(entry.verified_count)"></div>
+                            </td>
+                            <td class="px-6 py-4 text-right font-mono font-bold text-violet-600 text-lg" x-text="entry.verified_count"></td>
+                        </tr>
+                    </template>
+                    <tr x-show="leaders.length === 0">
+                        <td colspan="3" class="px-6 py-12 text-center text-slate-500">No contributions yet. Be the first!</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function leaderboardApp() {
+            return {
+                leaders: [],
+                async init() {
+                    if(localStorage.getItem('theme')==='dark') document.documentElement.classList.add('dark');
+                    // Call the RPC function
+                    const { data, error } = await sbClient.rpc('get_leaderboard');
+                    if(!error) this.leaders = data;
+                },
+                getRankTitle(count) {
+                    if (count >= 200) return "Co-Author 🏆";
+                    if (count >= 50) return "Senior Contributor ⚡";
+                    return "Contributor";
+                }
+            }
+        }
+    </script>
+</body>
+</html>

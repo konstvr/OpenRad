@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OpenRad Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { slate: { 850: '#1e293b', 900: '#0f172a' }, violet: { 500: '#8b5cf6', 600: '#7c3aed' } } } } }</script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>body{font-family:'Inter',sans-serif}[x-cloak]{display:none}</style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
+
+    <script src="js/app.js"></script>
+
+    <div x-data="adminApp()" x-init="init()" class="max-w-7xl mx-auto px-4 py-8">
+        
+        <div class="flex justify-between items-center mb-8 border-b border-slate-200 dark:border-slate-700 pb-4">
+            <div class="flex items-center gap-3">
+                <a href="index.html" class="bg-slate-200 dark:bg-slate-800 p-2 rounded-lg hover:bg-slate-300 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                </a>
+                <h1 class="text-2xl font-bold">Admin Dashboard</h1>
+            </div>
+            
+            <div class="flex gap-4">
+                 <div class="bg-slate-200 dark:bg-slate-800 p-1 rounded-lg flex text-sm font-bold">
+                    <button @click="activeTab = 'edits'" :class="activeTab==='edits' ? 'bg-white dark:bg-slate-600 shadow' : 'text-slate-500 hover:text-slate-800'" class="px-4 py-1.5 rounded-md transition">Edits</button>
+                    <button @click="activeTab = 'users'" :class="activeTab==='users' ? 'bg-white dark:bg-slate-600 shadow' : 'text-slate-500 hover:text-slate-800'" class="px-4 py-1.5 rounded-md transition">Users</button>
+                </div>
+
+                <button @click="exportDatabase()" class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition shadow-sm text-sm">
+                    Export DB
+                </button>
+            </div>
+        </div>
+
+        <div x-show="!isAdmin" class="text-center py-20 text-slate-500">Checking permissions...</div>
+
+        <div x-show="isAdmin" x-cloak>
+            
+            <div x-show="activeTab === 'edits'" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col h-[80vh]">
+                    <div class="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                        <h3 class="font-bold text-sm uppercase text-slate-500">Modified Models</h3>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-2 space-y-1">
+                        <template x-for="m in modifiedModels" :key="m.id">
+                            <button @click="selectModel(m)" :class="selectedModel?.id === m.id ? 'bg-violet-50 dark:bg-violet-900/20 border-violet-500' : 'border-transparent hover:bg-slate-50 dark:hover:bg-slate-700/50'" class="w-full text-left p-3 rounded-lg border-l-4 transition text-sm">
+                                <div class="font-bold truncate" x-text="m.card_data.Model.Name"></div>
+                                <div class="text-xs text-slate-500 mt-1" x-text="editCounts[m.id] + ' changes'"></div>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden h-[80vh] flex flex-col">
+                    <template x-if="selectedModel">
+                        <div class="flex flex-col h-full">
+                            <div class="p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-between">
+                                <h2 class="text-xl font-bold" x-text="selectedModel.card_data.Model.Name"></h2>
+                                <button @click="revertModel()" class="text-xs bg-red-100 text-red-700 px-3 py-1 rounded font-bold hover:bg-red-200">Revert</button>
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-6 space-y-4">
+                                <template x-for="edit in currentEdits" :key="edit.id">
+                                    <div class="bg-slate-50 dark:bg-slate-900/30 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
+                                        <div class="text-xs font-bold text-violet-600 mb-2" x-text="edit.field_path"></div>
+                                        <div class="grid grid-cols-2 gap-4 text-sm">
+                                            <div class="text-red-500 line-through" x-text="edit.old_value"></div>
+                                            <div class="text-green-600 font-medium" x-text="edit.new_value"></div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div x-show="activeTab === 'users'" class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div class="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                    <h2 class="text-lg font-bold">Registered Users</h2>
+                    <span class="text-sm text-slate-500" x-text="userList.length + ' users found'"></span>
+                </div>
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-slate-50 dark:bg-slate-900/50 text-xs uppercase text-slate-500">
+                        <tr>
+                            <th class="px-6 py-3">User</th>
+                            <th class="px-6 py-3">Role</th>
+                            <th class="px-6 py-3">Verified Count</th>
+                            <th class="px-6 py-3">Last Active</th>
+                            <th class="px-6 py-3">Joined</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                        <template x-for="u in userList" :key="u.id">
+                            <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                                <td class="px-6 py-3">
+                                    <div class="font-bold text-slate-900 dark:text-white" x-text="u.full_name"></div>
+                                    <div class="text-xs text-slate-500" x-text="u.email"></div>
+                                </td>
+                                <td class="px-6 py-3">
+                                    <span class="px-2 py-1 rounded text-xs font-bold bg-slate-100 text-slate-600" x-text="adminIds.includes(u.id) ? 'Admin' : 'Reviewer'"></span>
+                                </td>
+                                <td class="px-6 py-3 font-mono font-bold text-violet-600" x-text="u.verified_count"></td>
+                                <td class="px-6 py-3 text-slate-500" x-text="u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString() : 'Never'"></td>
+                                <td class="px-6 py-3 text-slate-500" x-text="new Date(u.created_at).toLocaleDateString()"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        function adminApp() {
+            return {
+                user: null, isAdmin: false, activeTab: 'edits',
+                // Data
+                allModels: [], allEdits: [], modifiedModels: [], editCounts: {}, selectedModel: null, currentEdits: [],
+                userList: [], adminIds: [],
+
+                async init() {
+                    if(localStorage.getItem('theme')==='dark') document.documentElement.classList.add('dark');
+                    const { data: { session } } = await sbClient.auth.getSession();
+                    this.user = session?.user;
+                    if(this.user) await this.checkRoleAndLoad();
+                },
+
+                async checkRoleAndLoad() {
+                    // Use maybeSingle() to safely check for role
+                    const { data, error } = await sbClient
+                        .from('user_roles')
+                        .select('role')
+                        .eq('id', this.user.id)
+                        .maybeSingle(); 
+                    
+                    if (data && data.role === 'admin') {
+                        this.isAdmin = true;
+                        await this.loadEdits();
+                        await this.loadUsers();
+                    } else {
+                        alert("Access Denied: You do not have administrator permissions.");
+                        window.location.href = 'index.html'; // Redirect to home
+                    }
+                },
+
+                async loadEdits() {
+                    // (Same load logic as before)
+                    const { data: models } = await sbClient.from('models').select('*');
+                    this.allModels = models || [];
+                    const { data: edits } = await sbClient.from('model_edits').select('*').order('created_at', { ascending: false });
+                    this.allEdits = edits || [];
+                    this.editCounts = {};
+                    this.allEdits.forEach(e => { this.editCounts[e.model_id] = (this.editCounts[e.model_id] || 0) + 1; });
+                    this.modifiedModels = this.allModels.filter(m => this.editCounts[m.id]);
+                },
+
+                async loadUsers() {
+                    // 1. Get List via RPC
+                    const { data, error } = await sbClient.rpc('get_users_for_admin');
+                    if(!error) this.userList = data;
+
+                    // 2. Get Admin IDs to flag them in the table
+                    const { data: roles } = await sbClient.from('user_roles').select('id').eq('role', 'admin');
+                    if(roles) this.adminIds = roles.map(r => r.id);
+                },
+
+                selectModel(model) {
+                    this.selectedModel = model;
+                    this.currentEdits = this.allEdits.filter(e => e.model_id === model.id);
+                },
+                // ... (Include your existing revertModel and exportDatabase functions here) ...
+                 async revertModel() {
+                    if(!confirm("Are you sure? This will:\n1. Reset all fields to their original values.\n2. Remove the 'Verified' badge.\n3. PERMANENTLY DELETE the edit history logs for this model.")) return;
+
+                    try {
+                        let originalData = JSON.parse(JSON.stringify(this.selectedModel.card_data));
+                        const sortedEdits = [...this.currentEdits].sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+                        const restoredFields = new Set();
+
+                        console.log("Attempting to revert fields:");
+                        sortedEdits.forEach(edit => {
+                            if(!restoredFields.has(edit.field_path)) {
+                                console.log(`Restoring ${edit.field_path} to:`, edit.old_value);
+                                this.setNested(originalData, edit.field_path, edit.old_value);
+                                restoredFields.add(edit.field_path);
+                            }
+                        });
+
+                        const { error: updateError } = await sbClient
+                            .from('models')
+                            .update({ 
+                                card_data: originalData,
+                                is_verified: false,
+                                verified_by: null,
+                                verification_date: null,
+                                assigned_to: null 
+                            })
+                            .eq('id', this.selectedModel.id);
+
+                        if(updateError) throw updateError;
+
+                        const { error: deleteError } = await sbClient
+                            .from('model_edits')
+                            .delete()
+                            .eq('model_id', this.selectedModel.id);
+
+                        if(deleteError) throw deleteError;
+
+                        alert("Model reverted successfully.");
+                        this.selectedModel = null;
+                        this.currentEdits = [];
+                        await this.loadEdits();
+
+                    } catch (err) {
+                        console.error(err);
+                        alert("Error reverting: " + err.message);
+                    }
+                },
+                
+                async exportDatabase() {
+                    const exportData = [];
+                    for (const model of this.allModels) {
+                        const exportCard = JSON.parse(JSON.stringify(model.card_data));
+                        
+                        // Find and inject edits
+                        const modelEdits = this.allEdits.filter(e => e.model_id === model.id);
+                        const editsDict = {};
+                        
+                        if (modelEdits.length > 0) {
+                            // Sort oldest first so newer edits overwrite older ones in the dict if needed
+                            modelEdits.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                            modelEdits.forEach(edit => {
+                                editsDict[edit.field_path] = edit.severity;
+                            });
+                        }
+                        
+                        // Add the 'edits' key as requested
+                        exportCard['edits'] = editsDict;
+                        exportData.push(exportCard);
+                    }
+
+                    // Download
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 4));
+                    const a = document.createElement('a');
+                    a.href = dataStr;
+                    a.download = `openrad_database_export_${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                },
+                
+                setNested(obj, path, value) {
+                    const keys = path.split('.');
+                    let current = obj;
+                    for (let i = 0; i < keys.length - 1; i++) {
+                        if (!current[keys[i]]) current[keys[i]] = {};
+                        current = current[keys[i]];
+                    }
+                    current[keys[keys.length - 1]] = value;
+                }
+            }
+        }
+    </script>
+</body>
+</html>
