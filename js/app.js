@@ -159,6 +159,9 @@ function dashboardApp() {
                 console.log(`[Fetch] Raw items fetched: ${allData.length}`);
 
                 allData.forEach(item => {
+                    // [SOFT DELETE FILTER] Skip items marked as deleted
+                    if (item.card_data && item.card_data._deleted) return;
+
                     if (item.id) {
                         // Normalize ID to ensure uniqueness
                         const safeId = String(item.id).trim();

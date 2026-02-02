@@ -8,6 +8,13 @@ document.addEventListener('alpine:init', () => {
         severities: {},
         copySuccess: false,
 
+        // Flagging State
+        flagModalOpen: false,
+        flagReason: 'Irrelevant',
+        flagComment: '',
+        isFlagged: false, // Visual cue state
+        flagId: null, // Track the specific edit ID for this flag
+
         async init() {
             // Theme check
             if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
@@ -32,6 +39,22 @@ document.addEventListener('alpine:init', () => {
             }
 
             this.model = data;
+
+            // Check for existing flag
+            if (this.user) {
+                const { data: flags } = await sbClient.from('model_edits')
+                    .select('id')
+                    .eq('model_id', this.model.id)
+                    .eq('user_id', this.user.id)
+                    .eq('field_path', '__FLAG__')
+                    .maybeSingle();
+
+                if (flags) {
+                    this.isFlagged = true;
+                    this.flagId = flags.id;
+                }
+            }
+
             this.loading = false;
         },
 
@@ -135,7 +158,7 @@ document.addEventListener('alpine:init', () => {
                             Use: this.model.card_data.Model['Model properties'].Use,
                             Validation: this.model.card_data.Model['Model properties'].Validation,
                             "Regulatory information": {
-                                Comment: this.model.card_data.Model['Model properties']['Regulatory information']?.Comment || ""
+                                "Comment": this.model.card_data.Model['Model properties']['Regulatory information']?.Comment || ""
                             }
                         },
                         "Model performance": {
@@ -152,6 +175,69 @@ document.addEventListener('alpine:init', () => {
             } catch (err) {
                 console.error(err);
                 alert("Failed to copy: " + err.message);
+            }
+        },
+
+        handleFlagClick() {
+            if (!this.user) {
+                alert("Please log in to flag models.");
+                return;
+            }
+
+            if (this.isFlagged) {
+                // UNFLAG
+                this.unflagModel();
+            } else {
+                // FLAG
+                this.flagModalOpen = true;
+            }
+        },
+
+        async unflagModel() {
+            if (!this.flagId) return;
+            // No confirm needed for unflagging, per user friction preference (implied)
+            // or maybe a small one:
+            if (!confirm("Remove your flag?")) return;
+
+            try {
+                const { error } = await sbClient.from('model_edits').delete().eq('id', this.flagId);
+                if (error) throw error;
+
+                this.isFlagged = false;
+                this.flagId = null;
+            } catch (e) {
+                console.error(e);
+                alert("Error unflagging: " + e.message);
+            }
+        },
+
+        async submitFlag() {
+            try {
+                const payload = {
+                    reason: this.flagReason,
+                    comment: this.flagComment
+                };
+
+                const { data, error } = await sbClient.from('model_edits').insert({
+                    model_id: this.model.id,
+                    user_id: this.user.id,
+                    field_path: '__FLAG__',
+                    old_value: '',
+                    new_value: JSON.stringify(payload),
+                    severity: 'major'
+                }).select().single();
+
+                if (error) throw error;
+
+                // Success State (Visual Cue)
+                this.isFlagged = true;
+                this.flagId = data.id; // Store ID for unflagging
+                this.flagModalOpen = false;
+                this.flagComment = '';
+
+            } catch (e) {
+                console.error(e);
+                console.error("Error flagging model: " + e.message);
             }
         },
 
