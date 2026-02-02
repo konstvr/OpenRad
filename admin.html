@@ -196,8 +196,37 @@
 
                 async loadEdits() {
                     // (Same load logic as before)
-                    const { data: models } = await sbClient.from('models').select('*');
-                    this.allModels = models || [];
+                    // const { data: models } = await sbClient.from('models').select('*');
+                    // this.allModels = models || [];
+
+                    // [FIX] Paginate Fetch to get ALL models (bypass 1000 limit)
+                    let allData = [];
+                    let from = 0;
+                    const batchSize = 1000;
+                    let done = false;
+
+                    try {
+                        while (!done) {
+                            const { data, error } = await sbClient
+                                .from('models')
+                                .select('*')
+                                .range(from, from + batchSize - 1);
+
+                            if (error) throw error;
+
+                            if (data && data.length > 0) {
+                                allData = allData.concat(data);
+                                from += batchSize;
+                                if (data.length < batchSize) done = true;
+                            } else {
+                                done = true;
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Error loading full DB:", err);
+                        alert("Error loading full database: " + err.message);
+                    }
+                    this.allModels = allData;
                     const { data: edits } = await sbClient.from('model_edits').select('*').order('created_at', { ascending: false });
                     this.allEdits = edits || [];
                     this.editCounts = {};

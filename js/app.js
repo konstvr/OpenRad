@@ -9,15 +9,15 @@ const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const MODALITY_CODES = ["CT", "FL", "MR", "NM", "PET", "US", "XR", "DXA"];
 const USE_CATEGORIES = ["Classification", "Detection", "Segmentation", "Foundation", "LLM", "Generative", "Other"];
 const FULL_MAPPING = {
-    "BR": "Breast", "BQ": "Biomarkers", "CA": "Cardiac Radiology", "CH": "Chest Radiology", 
+    "BR": "Breast", "BQ": "Biomarkers", "CA": "Cardiac Radiology", "CH": "Chest Radiology",
     "CT": "Computed Tomography", "DM": "Digital Mammography", "ED": "Education", "ER": "Emergency Radiology",
     "GI": "Gastrointestinal Radiology", "GU": "Genitourinary Radiology", "HN": "Head and Neck", "HP": "Health Policy",
     "IN": "Informatics", "IR": "Interventional", "LM": "Leadership & Management", "MI": "Molecular Imaging",
     "MK": "Musculoskeletal Radiology", "MR": "Magnetic Resonance Imaging", "NM": "Nuclear Medicine", "NR": "Neuroradiology",
     "OB": "Obstetric/Gynecologic Radiology", "OI": "Oncologic Imaging", "OT": "Other", "PD": "Pediatric Radiology",
     "PH": "Physics and Basic Science", "PR": "Professionalism", "SQ": "Quality Assurance", "RO": "Radiation Oncology",
-    "RS": "Research and Statistical Methods", "US": "Ultrasound", "VA": "Vascular", "VI":"Vascular", "AB":"Abdomen", "FL":"Fluoroscopy",
-    "XR":"X-ray", "DXA":"DEXA"
+    "RS": "Research and Statistical Methods", "US": "Ultrasound", "VA": "Vascular", "VI": "Vascular", "AB": "Abdomen", "FL": "Fluoroscopy",
+    "XR": "X-ray", "DXA": "DEXA"
 };
 
 // --- SHARED STORE ---
@@ -32,8 +32,8 @@ document.addEventListener('alpine:init', () => {
         async init() {
             const { data: { session } } = await sbClient.auth.getSession();
             this.user = session?.user || null;
-            sbClient.auth.onAuthStateChange((_event, session) => { 
-                this.user = session?.user || null; 
+            sbClient.auth.onAuthStateChange((_event, session) => {
+                this.user = session?.user || null;
             });
             this.loading = false;
         },
@@ -43,12 +43,12 @@ document.addEventListener('alpine:init', () => {
                 email: this.email,
                 password: this.password
             });
-            
+
             if (error) {
                 alert("Login Failed: " + error.message);
             } else {
                 this.modalOpen = false;
-                this.password = ''; 
+                this.password = '';
             }
         },
 
@@ -69,7 +69,7 @@ function checkWeights(modelData) {
 function checkDemo(modelData) {
     const props = modelData.Model?.['Model properties'] || modelData['Model properties'];
     const repo = props?.repository_analysis;
-    
+
     // 1. Get the link from Deep Path (Priority) or Legacy/Root Paths
     let link = repo?.demo_link || modelData.demo_link || modelData.Model?.demo_link;
 
@@ -85,10 +85,10 @@ function dashboardApp() {
         loading: true,
         allModels: [],
         searchQuery: '',
-        
+
         // PAGINATION / SCROLL STATE
         displayLimit: 100,
-        
+
         // FILTERS
         filterVerified: false,
         filterDemo: false,
@@ -99,8 +99,8 @@ function dashboardApp() {
         codeMap: FULL_MAPPING,
 
         async initApp() {
-            if(this.darkMode) document.documentElement.classList.add('dark');
-            
+            if (this.darkMode) document.documentElement.classList.add('dark');
+
             // 1. WAIT for the session to load from LocalStorage
             // This ensures Supabase has the user's token before we ask for data.
             await sbClient.auth.getSession();
@@ -139,7 +139,7 @@ function dashboardApp() {
                     if (data && data.length > 0) {
                         allData = allData.concat(data);
                         from += batchSize;
-                        
+
                         // If we received fewer rows than we asked for, we reached the end.
                         if (data.length < batchSize) {
                             done = true;
@@ -151,8 +151,34 @@ function dashboardApp() {
                 }
 
                 // Success: We now have the full dataset
-                this.allModels = allData;
-                
+                // [FIX] Deduplicate AND Filter invalid IDs (Strict)
+                const uniqueData = new Map();
+                let invalidCount = 0;
+                let duplicateCount = 0;
+
+                console.log(`[Fetch] Raw items fetched: ${allData.length}`);
+
+                allData.forEach(item => {
+                    if (item.id) {
+                        // Normalize ID to ensure uniqueness
+                        const safeId = String(item.id).trim();
+                        if (!uniqueData.has(safeId)) {
+                            uniqueData.set(safeId, item);
+                        } else {
+                            duplicateCount++;
+                            // console.warn('Duplicate found:', safeId, item.card_data.Model.Name);
+                        }
+                    } else {
+                        invalidCount++;
+                    }
+                });
+
+                if (invalidCount > 0) console.warn(`[Fetch] Filtered ${invalidCount} items with missing IDs`);
+                if (duplicateCount > 0) console.warn(`[Fetch] Removed ${duplicateCount} duplicate items`);
+
+                this.allModels = Array.from(uniqueData.values());
+                console.log(`[Fetch] Final unique models: ${this.allModels.length}`);
+
             } catch (err) {
                 console.error("Error fetching models:", err);
             } finally {
@@ -170,11 +196,11 @@ function dashboardApp() {
             const idx = this[arrayName].indexOf(item);
             if (idx === -1) this[arrayName].push(item);
             else this[arrayName].splice(idx, 1);
-            
+
             // Reset scroll when filtering changes so user starts at top
             this.displayLimit = 100;
         },
-        
+
         getFilterArray(name) { return this[name]; },
 
         resetFilters() {
@@ -197,8 +223,8 @@ function dashboardApp() {
         },
 
         get isFiltered() {
-            return this.searchQuery || this.filterVerified || this.filterDemo || this.filterWeights || 
-                   this.selectedSpecialties.length || this.selectedModalities.length || this.selectedUses.length;
+            return this.searchQuery || this.filterVerified || this.filterDemo || this.filterWeights ||
+                this.selectedSpecialties.length || this.selectedModalities.length || this.selectedUses.length;
         },
 
         // --- HELPER FOR ARRAYS ---
@@ -210,22 +236,22 @@ function dashboardApp() {
         // --- DYNAMIC LISTS ---
         extractCodes(condition) {
             const s = new Set();
-            this.allModels.forEach(row => { 
-                const val = row.card_data.Model.Indexing?.Content; 
-                if(val) val.forEach(c => condition(c) && s.add(c)); 
+            this.allModels.forEach(row => {
+                const val = row.card_data.Model.Indexing?.Content;
+                if (val) val.forEach(c => condition(c) && s.add(c));
             });
             return Array.from(s).sort();
         },
         get availableSpecialties() { return this.extractCodes(c => !MODALITY_CODES.includes(c)); },
         get availableModalities() { return this.extractCodes(c => MODALITY_CODES.includes(c)); },
-        
+
         get availableUses() {
             const s = new Set();
-            this.allModels.forEach(r => { 
+            this.allModels.forEach(r => {
                 const uses = this.asArray(r.card_data.Model['Model properties'].Use);
                 let hasValidCategory = false;
                 uses.forEach(u => {
-                    const cleanU = u.trim(); 
+                    const cleanU = u.trim();
                     if (USE_CATEGORIES.includes(cleanU)) {
                         s.add(cleanU);
                         hasValidCategory = true;
@@ -235,7 +261,7 @@ function dashboardApp() {
             });
             return Array.from(s).sort();
         },
-        
+
         getCount(val, type) {
             if (type === 'Use Case') {
                 return this.allModels.filter(r => {
@@ -252,7 +278,7 @@ function dashboardApp() {
             const content = item.card_data.Model.Indexing?.Content || [];
             return content.filter(c => MODALITY_CODES.includes(c));
         },
-        
+
         getSpecialties(item) {
             const content = item.card_data.Model.Indexing?.Content || [];
             return content.filter(c => !MODALITY_CODES.includes(c)).map(c => FULL_MAPPING[c] || c);
@@ -262,7 +288,7 @@ function dashboardApp() {
         get filteredModels() {
             return this.allModels.filter(row => {
                 const m = row.card_data.Model;
-                
+
                 // 1. Search
                 if (this.searchQuery && !JSON.stringify(m).toLowerCase().includes(this.searchQuery.toLowerCase())) return false;
 
@@ -275,7 +301,7 @@ function dashboardApp() {
                 const content = m.Indexing?.Content || [];
                 if (this.selectedModalities.length > 0 && !this.selectedModalities.some(x => content.includes(x))) return false;
                 if (this.selectedSpecialties.length > 0 && !this.selectedSpecialties.some(x => content.includes(x))) return false;
-                
+
                 // 4. Use Case Filter (AND Logic)
                 if (this.selectedUses.length > 0) {
                     const modelUses = this.asArray(m['Model properties'].Use).map(u => u.trim());

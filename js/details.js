@@ -10,53 +10,53 @@ document.addEventListener('alpine:init', () => {
 
         async init() {
             // Theme check
-            if(localStorage.getItem('theme')==='dark') document.documentElement.classList.add('dark');
-            
+            if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
+
             // Auth check
             const { data: { session } } = await sbClient.auth.getSession();
             this.user = session?.user;
 
             // Get ID from URL
             const id = new URLSearchParams(window.location.search).get('id');
-            if(!id) {
+            if (!id) {
                 window.location.href = 'index.html';
                 return;
             }
 
             // Fetch Model
             const { data, error } = await sbClient.from('models').select('*').eq('id', id).single();
-            if(error || !data) {
+            if (error || !data) {
                 alert("Model not found");
                 window.location.href = 'index.html';
                 return;
             }
-            
+
             this.model = data;
             this.loading = false;
         },
 
         // --- UI HELPERS ---
-        hasData(str) { 
-            return str && str.trim().length > 0; 
+        hasData(str) {
+            return str && str.trim().length > 0;
         },
-        
+
         checkWeights() {
             const r = this.model.card_data.Model['Model properties'].repository_analysis;
             return r && (r.contains_weights === 'yes' || r.contains_weights === true);
         },
 
         getPrimaryModalities() {
-            if(!this.model) return [];
+            if (!this.model) return [];
             const content = this.model.card_data.Model.Indexing?.Content || [];
             // Assumes MODALITY_CODES is defined in app.js
             return content.filter(c => typeof MODALITY_CODES !== 'undefined' && MODALITY_CODES.includes(c));
         },
 
         getSubspecialties() {
-            if(!this.model) return [];
+            if (!this.model) return [];
             const content = this.model.card_data.Model.Indexing?.Content || [];
             if (typeof MODALITY_CODES === 'undefined' || typeof FULL_MAPPING === 'undefined') return content;
-            
+
             const specialties = content.filter(c => !MODALITY_CODES.includes(c));
             return specialties.map(s => FULL_MAPPING[s] || s);
         },
@@ -64,27 +64,44 @@ document.addEventListener('alpine:init', () => {
         getUseAsArray(val) {
             if (!val) return [];
             if (Array.isArray(val)) return val;
-            return [val]; 
+            return [val];
         },
 
         getPaperLink() {
             const refs = this.model.card_data.Model.Descriptors?.References;
-            if(refs && refs.length > 0 && refs[0].DOI) {
-                return 'https://doi.org/' + refs[0].DOI;
+            if (!refs || refs.length === 0) return null;
+
+            const ref = refs[0];
+
+            // 1. Priority: Manual Override
+            if (ref.PaperLink && ref.PaperLink.trim().length > 0) {
+                const link = ref.PaperLink.trim();
+                // Ensure it starts with http/https
+                if (link.startsWith('http')) return link;
             }
+
+            // 2. Priority: DOI Field
+            if (ref.DOI) {
+                const doi = ref.DOI.trim();
+                // Standard DOI
+                if (doi.startsWith('10.')) return 'https://doi.org/' + doi;
+                // Direct URL (e.g. arXiv)
+                if (doi.startsWith('http')) return doi;
+            }
+
             return null;
         },
 
         getDemoLink() {
             if (!this.model) return null;
             const m = this.model.card_data;
-            
+
             // 1. Try Deep Path
             let link = m.Model?.['Model properties']?.repository_analysis?.demo_link;
-            
+
             // 2. Fallback to Legacy/Root Paths
             if (!link) link = m.demo_link || m.Model?.demo_link;
-            
+
             // 3. Strict Validation (must be http/https)
             if (typeof link === 'string' && /^https?:\/\//i.test(link.trim())) {
                 return link.trim();
@@ -129,7 +146,7 @@ document.addEventListener('alpine:init', () => {
 
                 const jsonStr = JSON.stringify(cleanData, null, 4);
                 await navigator.clipboard.writeText(jsonStr);
-                
+
                 this.copySuccess = true;
                 setTimeout(() => { this.copySuccess = false; }, 2000);
             } catch (err) {
@@ -141,26 +158,34 @@ document.addEventListener('alpine:init', () => {
         // --- EDIT LOGIC ---
         toggleEdit() {
             this.editMode = !this.editMode;
-            if(this.editMode) {
+            if (this.editMode) {
                 this.draft = JSON.parse(JSON.stringify(this.model.card_data));
                 this.severities = {};
-                
+
                 // [FIX] Ensure nested structure exists for Demo Link
-                if(!this.draft.Model['Model properties']) this.draft.Model['Model properties'] = {};
-                if(!this.draft.Model['Model properties'].repository_analysis) {
+                if (!this.draft.Model['Model properties']) this.draft.Model['Model properties'] = {};
+                if (!this.draft.Model['Model properties'].repository_analysis) {
                     this.draft.Model['Model properties'].repository_analysis = {};
                 }
 
                 // Initialize nested objects if missing
-                if(!this.draft.Model['Model performance']) this.draft.Model['Model performance'] = { Comments: '' };
-                if(!this.draft.Model['Model properties']) this.draft.Model['Model properties'] = {};
-                if(!this.draft.Model['Model properties']['Regulatory information']) this.draft.Model['Model properties']['Regulatory information'] = { Comment: '' };
+                if (!this.draft.Model['Model performance']) this.draft.Model['Model performance'] = { Comments: '' };
+                if (!this.draft.Model['Model properties']) this.draft.Model['Model properties'] = {};
+                if (!this.draft.Model['Model properties']['Regulatory information']) this.draft.Model['Model properties']['Regulatory information'] = { Comment: '' };
 
                 // Sanitize Use Case (Filter invalid options)
                 const validOptions = ['Classification', 'Detection', 'Segmentation', 'Foundation', 'LLM', 'Generative', 'Other'];
                 let currentUse = this.draft.Model['Model properties'].Use;
                 let asArray = Array.isArray(currentUse) ? currentUse : (currentUse ? [currentUse] : []);
                 this.draft.Model['Model properties'].Use = asArray.filter(item => validOptions.includes(item));
+
+                // [FIX] Ensure References array and first element exist
+                if (!this.draft.Model.Descriptors) this.draft.Model.Descriptors = {};
+                if (!this.draft.Model.Descriptors.References) this.draft.Model.Descriptors.References = [{}];
+                if (this.draft.Model.Descriptors.References.length === 0) this.draft.Model.Descriptors.References.push({});
+
+                // Ensure PaperLink exists
+                if (!this.draft.Model.Descriptors.References[0].PaperLink) this.draft.Model.Descriptors.References[0].PaperLink = '';
             }
         },
 
@@ -170,10 +195,15 @@ document.addEventListener('alpine:init', () => {
             const fields = [
                 { path: 'Model.Name', old: this.model.card_data.Model.Name, new: this.draft.Model.Name },
                 { path: 'Model.Link', old: this.model.card_data.Model.Link, new: this.draft.Model.Link },
-                { 
-                    path: 'Model.Model properties.repository_analysis.demo_link', 
-                    old: this.model.card_data.Model['Model properties']?.repository_analysis?.demo_link, 
-                    new: this.draft.Model['Model properties'].repository_analysis.demo_link 
+                {
+                    path: 'Model.Model properties.repository_analysis.demo_link',
+                    old: this.model.card_data.Model['Model properties']?.repository_analysis?.demo_link,
+                    new: this.draft.Model['Model properties'].repository_analysis.demo_link
+                },
+                {
+                    path: 'Model.Descriptors.References.0.PaperLink',
+                    old: this.model.card_data.Model.Descriptors?.References?.[0]?.PaperLink,
+                    new: this.draft.Model.Descriptors.References[0].PaperLink
                 },
                 { path: 'Model.Model properties.Architecture', old: this.model.card_data.Model['Model properties'].Architecture, new: this.draft.Model['Model properties'].Architecture },
                 { path: 'Model.Model properties.Dataset', old: this.model.card_data.Model['Model properties'].Dataset, new: this.draft.Model['Model properties'].Dataset },
@@ -205,8 +235,8 @@ document.addEventListener('alpine:init', () => {
                 verified_by: this.user.id,
                 verification_date: new Date()
             }).eq('id', this.model.id);
-            
-            if(!error) {
+
+            if (!error) {
                 this.model.card_data = this.draft;
                 this.model.is_verified = true;
                 this.editMode = false;
