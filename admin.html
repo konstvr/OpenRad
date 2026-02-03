@@ -381,7 +381,13 @@
                         console.error("Error loading full DB:", err);
                         alert("Error loading full database: " + err.message);
                     }
-                    this.allModels = allData;
+                    this.allModels = allData.map(m => {
+                        let cd = m.card_data;
+                        if (typeof cd === 'string') {
+                            try { cd = JSON.parse(cd); } catch (e) { cd = null; }
+                        }
+                        return { ...m, card_data: cd };
+                    });
                     const { data: edits } = await sbClient.from('model_edits').select('*').order('created_at', { ascending: false });
                     this.allEdits = edits || [];
                     this.editCounts = {};
@@ -422,27 +428,21 @@
                 async loadTrash() {
                     this.loading = true;
                     try {
-                        const { data, error } = await sbClient
-                            .from('models')
-                            .select('*')
-                            .order('created_at', { ascending: false });
+                        // Ensure we have data
+                        if (this.allModels.length === 0) {
+                            await this.loadEdits();
+                        }
 
-                        if (error) throw error;
-
-                        this.trash = data.map(m => {
+                        this.trash = this.allModels.map(m => {
                             let cd = m.card_data;
-                            // Try parsing if string, otherwise use as is
                             if (typeof cd === 'string') {
                                 try { cd = JSON.parse(cd); } catch (e) { cd = null; }
                             }
-                            // Return filtered object locally with parsed data
                             return { ...m, card_data: cd };
                         }).filter(m => {
                             const cd = m.card_data;
-                            // Filter for deleted status
                             return cd && (cd._deleted === true || cd._deleted === "true" || cd._deleted_at);
                         });
-
                     } catch (err) {
                         console.error("Error loading trash:", err);
                     } finally {
@@ -472,15 +472,26 @@
                 async restoreModel(model) {
                     if (!confirm("Restore this model to the public directory?")) return;
 
-                    let newData = { ...model.card_data, _deleted: false };
-                    if (typeof model.card_data === 'string') newData = { ...JSON.parse(model.card_data), _deleted: false };
+                    try {
+                        let newData = { ...model.card_data, _deleted: false };
+                        if (typeof model.card_data === 'string') newData = { ...JSON.parse(model.card_data), _deleted: false };
 
-                    delete newData._deleted_at;
+                        delete newData._deleted_at;
+                        const payload = JSON.stringify(newData);
 
-                    await sbClient.from('models').update({ card_data: newData }).eq('id', model.id);
-                    await this.loadTrash(); // Refresh list
-                    await this.loadEdits(); // Refresh main list too
-                    alert("Model restored!");
+                        const { error } = await sbClient.from('models').update({ card_data: payload }).eq('id', model.id);
+                        if (error) throw error;
+
+                        // UPDATE LOCAL STATE
+                        model.card_data = newData;
+
+                        // Refresh views using local state (no network fetch needed)
+                        this.loadTrash();
+                        alert("Model restored!");
+                    } catch (err) {
+                        console.error(err);
+                        alert("Error restoring: " + err.message);
+                    }
                 },
 
                 async deleteModel(flag) {
@@ -497,24 +508,47 @@
                         updatedCard._deleted = true;
                         updatedCard._deleted_at = new Date();
 
+                        const payload = JSON.stringify(updatedCard);
+
                         const { error: updateError } = await sbClient
                             .from('models')
-                            .update({ card_data: updatedCard })
+                            .update({ card_data: payload })
                             .eq('id', flag.model_id);
 
                         if (updateError) throw updateError;
 
-                        // Delete the flag since the issue is "resolved" by deletion
+                        // Delete the flag
                         await sbClient.from('model_edits').delete().eq('id', flag.id);
 
+                        // UPDATE LOCAL STATE
+                        model.card_data = updatedCard; // Crucial: Updates this.allModels reference
+
                         alert("Model deleted (hidden).");
-                        await this.loadEdits();
-                        await this.loadFlags();
-                        await this.loadTrash(); // Update trash list immediately
+
+                        // Refresh views using local state
+                        this.loadTrash();
+                        this.loadEdits();
+                        await this.loadFlags(); // Reload flags from DB to confirm removal
                     } catch (err) {
                         console.error(err);
                         alert("Error deleting: " + err.message);
                     }
+                },
+
+                loadTrash() {
+                    // Use local allModels which is fully loaded via batching in loadEdits/init
+                    console.log("Loading trash from local models. Total models:", this.allModels.length);
+                    this.trash = this.allModels.map(m => {
+                        let cd = m.card_data;
+                        if (typeof cd === 'string') {
+                            try { cd = JSON.parse(cd); } catch (e) { cd = null; }
+                        }
+                        return { ...m, card_data: cd };
+                    }).filter(m => {
+                        const cd = m.card_data;
+                        return cd && (cd._deleted === true || cd._deleted === "true" || cd._deleted_at);
+                    });
+                    console.log("Trash items found:", this.trash.length);
                 },
 
                 async dismissFlag(flag) {

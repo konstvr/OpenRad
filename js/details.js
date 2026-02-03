@@ -40,6 +40,25 @@ document.addEventListener('alpine:init', () => {
 
             this.model = data;
 
+            // [DEBUG] Log initial data
+            console.log("Fetched model data:", this.model);
+            console.log("Type of card_data:", typeof this.model.card_data);
+
+            // [FIX] Recursive parsing to handle potential double-stringification
+            let parseAttempts = 0;
+            while (this.model.card_data && typeof this.model.card_data === 'string' && parseAttempts < 3) {
+                try {
+                    console.log("Parsing card_data (attempt " + (parseAttempts + 1) + ")...");
+                    this.model.card_data = JSON.parse(this.model.card_data);
+                } catch (e) {
+                    console.error("Failed to parse card_data:", e);
+                    break;
+                }
+                parseAttempts++;
+            }
+
+            console.log("Final card_data:", this.model.card_data);
+
             // Check for existing flag
             if (this.user) {
                 const { data: flags } = await sbClient.from('model_edits')

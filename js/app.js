@@ -159,8 +159,18 @@ function dashboardApp() {
                 console.log(`[Fetch] Raw items fetched: ${allData.length}`);
 
                 allData.forEach(item => {
-                    // [SOFT DELETE FILTER] Skip items marked as deleted
-                    if (item.card_data && item.card_data._deleted) return;
+                    // [FIX] Ensure card_data is an object (handle stringified JSON from Admin actions)
+                    if (item.card_data && typeof item.card_data === 'string') {
+                        try {
+                            item.card_data = JSON.parse(item.card_data);
+                        } catch (e) {
+                            console.warn("Failed to parse card_data for ID:", item.id);
+                            item.card_data = null;
+                        }
+                    }
+
+                    // [SOFT DELETE FILTER] Skip items marked as deleted or invalid
+                    if (!item.card_data || item.card_data._deleted === true || item.card_data._deleted === "true" || item.card_data._deleted_at) return;
 
                     if (item.id) {
                         // Normalize ID to ensure uniqueness
