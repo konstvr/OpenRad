@@ -334,7 +334,27 @@ function dashboardApp() {
             return this.filteredModels.slice(0, this.displayLimit);
         },
 
-        goToDetails(id) { window.location.href = `details.html?id=${id}`; },
+        goToDetails(id) {
+            // [FIX] Handle string vs number ID mismatch
+            const model = this.allModels.find(m => String(m.id) === String(id));
+
+            // Debugging
+            if (!model) {
+                console.warn(`[GoToDetails] Model not found for ID: ${id} (Type: ${typeof id})`);
+                console.log("First 5 available IDs:", this.allModels.slice(0, 5).map(m => m.id));
+            }
+
+            // Check for atlas_link in multiple possible locations
+            const atlasLink = model?.card_data?.Model?.atlas_link || model?.card_data?.atlas_link;
+
+            if (atlasLink && typeof atlasLink === 'string' && atlasLink.startsWith('http')) {
+                console.log(`[GoToDetails] Redirecting to External Atlas Link: ${atlasLink}`);
+                window.location.href = atlasLink;
+            } else {
+                console.log(`[GoToDetails] Opening internal details for ID: ${id}`);
+                window.location.href = `details.html?id=${id}`;
+            }
+        },
         updateCharts() { renderDashboardCharts(this.allModels); }
     }
 }
