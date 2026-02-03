@@ -413,8 +413,7 @@
 
                             <div>
                                 <div class="flex justify-between items-end mb-1">
-                                    <label class="text-xs font-bold uppercase text-slate-500">Manual Paper Link
-                                        (Optional)</label>
+                                    <label class="text-xs font-bold uppercase text-slate-500">Manual Paper Link</label>
                                     <select x-model="severities['Model.Descriptors.References.0.PaperLink']"
                                         class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
                                         <option value="minor">Severity: Minor</option>
@@ -558,8 +557,9 @@
                         <div class="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
                             <button @click="toggleEdit()"
                                 class="px-6 py-2.5 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition">Cancel</button>
-                            <button @click="saveChanges()"
-                                class="px-6 py-2.5 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-lg transition flex items-center gap-2">
+                            <button @click="saveChanges()" :disabled="!isFormValid()"
+                                :class="!isFormValid() ? 'opacity-50 cursor-not-allowed bg-slate-400' : 'bg-green-600 hover:bg-green-700 shadow-lg'"
+                                class="px-6 py-2.5 text-white font-bold rounded-lg transition flex items-center gap-2">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M5 13l4 4L19 7"></path>

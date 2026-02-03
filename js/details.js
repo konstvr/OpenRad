@@ -317,6 +317,26 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        isFormValid() {
+            if (!this.draft) return false;
+
+            // Check Repository Link
+            const hasRepoLink = this.draft.Model.Link && this.draft.Model.Link.trim().length > 0;
+
+            // Check Demo Link
+            const hasDemoLink = this.draft.Model['Model properties']?.repository_analysis?.demo_link &&
+                this.draft.Model['Model properties'].repository_analysis.demo_link.trim().length > 0;
+
+            // Check Paper Link
+            const refs = this.draft.Model.Descriptors?.References;
+            const hasPaperLink = refs && refs.length > 0 &&
+                refs[0].PaperLink &&
+                refs[0].PaperLink.trim().length > 0;
+
+            // Logic: Paper Link IS REQUIRED + (Repo Link OR Demo Link)
+            return hasPaperLink && (hasRepoLink || hasDemoLink);
+        },
+
         async saveChanges() {
             if (!this.user) return;
 
