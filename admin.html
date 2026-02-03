@@ -191,6 +191,16 @@
                             Flagged Models Queue
                         </h2>
                         <div class="flex items-center gap-2">
+                            <button @click="syncFlags()"
+                                title="Fix inconsistencies where models are stuck as flagged but have no flags"
+                                class="text-xs px-3 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-300 transition font-bold flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                                    </path>
+                                </svg>
+                                Sync Data
+                            </button>
                             <select x-model="flagFilter"
                                 class="text-xs p-1 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-violet-500">
                                 <template x-for="opt in filterOptions">
@@ -330,6 +340,7 @@
                 user: null, isAdmin: false, activeTab: 'edits',
                 // Data
                 allModels: [], allEdits: [], modifiedModels: [], editCounts: {}, selectedModel: null, currentEdits: [],
+                flaggedModels: [], trash: [], // Initialize to avoid undefined errors
                 userList: [], adminIds: [],
                 flagFilter: 'All',
                 trashFilter: 'All',
@@ -572,12 +583,85 @@
                 async dismissFlag(flag) {
                     if (!confirm("Dismiss this flag? The model will remain active.")) return;
                     try {
-                        const { error } = await sbClient.from('model_edits').delete().eq('id', flag.id);
-                        if (error) throw error;
+                        // 1. Delete this specific flag
+                        const { error: deleteError } = await sbClient.from('model_edits').delete().eq('id', flag.id);
+                        if (deleteError) throw deleteError;
+
+                        // 2. Check if any OTHER flags exist for this model
+                        const { count, error: countError } = await sbClient
+                            .from('model_edits')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('model_id', flag.model_id)
+                            .eq('field_path', '__FLAG__');
+
+                        if (countError) throw countError;
+
+                        // 3. If no flags remain, unflag the model publicly
+                        if (count === 0 || count === null) {
+                            const { error: updateError } = await sbClient
+                                .from('models')
+                                .update({ is_flagged: false, flag_reason: null })
+                                .eq('id', flag.model_id);
+
+                            if (updateError) throw updateError;
+                        }
+
                         await this.loadFlags();
                     } catch (err) {
                         console.error(err);
                         alert("Error dismissing: " + err.message);
+                    }
+                },
+
+                async syncFlags() {
+                    if (!confirm("Run diagnostics? This will find models that are marked as 'Flagged' but have no active flag reports, and fix them. This fixes 'stuck' flagged models.")) return;
+
+                    this.loading = true;
+                    try {
+                        // 1. Get all models that are publicly marked as flagged
+                        const { data: flaggedModels, error: fetchError } = await sbClient
+                            .from('models')
+                            .select('id, card_data')
+                            .eq('is_flagged', true);
+
+                        if (fetchError) throw fetchError;
+
+                        let fixedCount = 0;
+                        console.log(`Checking ${flaggedModels.length} flagged models for consistency...`);
+
+                        for (const model of flaggedModels) {
+                            // 2. Check actual flags in model_edits
+                            const { count, error: countError } = await sbClient
+                                .from('model_edits')
+                                .select('*', { count: 'exact', head: true })
+                                .eq('model_id', model.id)
+                                .eq('field_path', '__FLAG__');
+
+                            if (countError) throw countError;
+
+                            // 3. If no actual flags exist, but model is is_flagged=true -> FIX IT
+                            if (count === 0) {
+                                console.log(`Fixing model ${model.id} (No active flags found)`);
+                                await sbClient
+                                    .from('models')
+                                    .update({ is_flagged: false, flag_reason: null })
+                                    .eq('id', model.id);
+                                fixedCount++;
+                            }
+                        }
+
+                        if (fixedCount > 0) {
+                            alert(`Synchronization Complete: Fixed ${fixedCount} models that were incorrectly marked as flagged.`);
+                            await this.loadFlags(); // Refresh list
+                        } else {
+                            alert("Data is healthy. No inconsistencies found.");
+                        }
+
+                    } catch (e) {
+                        console.error(e);
+                        alert("Sync failed: " + e.message);
+                    } finally {
+                        this.loading = false;
                     }
                 },
 
