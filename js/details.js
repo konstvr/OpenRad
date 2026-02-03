@@ -325,7 +325,15 @@ document.addEventListener('alpine:init', () => {
                 if (this.draft.Model.Descriptors.References.length === 0) this.draft.Model.Descriptors.References.push({});
 
                 // Ensure PaperLink exists
-                if (!this.draft.Model.Descriptors.References[0].PaperLink) this.draft.Model.Descriptors.References[0].PaperLink = '';
+                if (!this.draft.Model.Descriptors.References[0].PaperLink) {
+                    this.draft.Model.Descriptors.References[0].PaperLink = '';
+
+                    // [FIX] Auto-populate with existing derived link if available
+                    const existingLink = this.getPaperLink();
+                    if (existingLink) {
+                        this.draft.Model.Descriptors.References[0].PaperLink = existingLink;
+                    }
+                }
             }
         },
 
