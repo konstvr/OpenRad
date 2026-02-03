@@ -190,15 +190,23 @@
                             </svg>
                             Flagged Models Queue
                         </h2>
-                        <span class="text-sm text-slate-500" x-text="flaggedModels.length + ' reports'"></span>
+                        <div class="flex items-center gap-2">
+                            <select x-model="flagFilter"
+                                class="text-xs p-1 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-violet-500">
+                                <template x-for="opt in filterOptions">
+                                    <option :value="opt" x-text="opt"></option>
+                                </template>
+                            </select>
+                            <span class="text-sm text-slate-500" x-text="getFilteredFlags().length + ' reports'"></span>
+                        </div>
                     </div>
 
                     <div class="divide-y divide-slate-100 dark:divide-slate-700">
-                        <div x-show="flaggedModels.length === 0" class="p-12 text-center text-slate-400">
-                            Looking good! No flagged models.
+                        <div x-show="getFilteredFlags().length === 0" class="p-12 text-center text-slate-400">
+                            Looking good! No flagged models matching filter.
                         </div>
 
-                        <template x-for="flag in flaggedModels" :key="flag.id">
+                        <template x-for="flag in getFilteredFlags()" :key="flag.id">
                             <div
                                 class="p-6 hover:bg-slate-50 dark:hover:bg-slate-900/30 transition flex flex-col md:flex-row gap-6">
                                 <div class="flex-1">
@@ -269,15 +277,23 @@
                             </svg>
                             Trash Can (Soft Deleted)
                         </h2>
-                        <span class="text-sm text-slate-500" x-text="trash.length + ' items'"></span>
+                        <div class="flex items-center gap-2">
+                            <select x-model="trashFilter"
+                                class="text-xs p-1 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-violet-500">
+                                <template x-for="opt in filterOptions">
+                                    <option :value="opt" x-text="opt"></option>
+                                </template>
+                            </select>
+                            <span class="text-sm text-slate-500" x-text="getFilteredTrash().length + ' items'"></span>
+                        </div>
                     </div>
 
                     <div class="divide-y divide-slate-100 dark:divide-slate-700">
-                        <div x-show="trash.length === 0" class="p-12 text-center text-slate-400">
-                            Trash is empty.
+                        <div x-show="getFilteredTrash().length === 0" class="p-12 text-center text-slate-400">
+                            Trash is empty or no matches.
                         </div>
 
-                        <template x-for="model in trash" :key="model.id">
+                        <template x-for="model in getFilteredTrash()" :key="model.id">
                             <div
                                 class="p-6 hover:bg-slate-50 dark:hover:bg-slate-900/30 transition flex flex-col md:flex-row gap-6 items-center">
                                 <div class="flex-1">
@@ -315,8 +331,10 @@
                 // Data
                 allModels: [], allEdits: [], modifiedModels: [], editCounts: {}, selectedModel: null, currentEdits: [],
                 userList: [], adminIds: [],
-                flaggedModels: [],
-                trash: [],
+                flagFilter: 'All',
+                trashFilter: 'All',
+                filterOptions: ['All', 'Irrelevant/ Spam', 'Database', 'No code', 'Other', 'Unsorted'],
+                standardCategories: ['Irrelevant/ Spam', 'Database', 'No code', 'Other'],
 
                 async init() {
                     if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
@@ -648,6 +666,29 @@
                         current = current[keys[i]];
                     }
                     current[keys[keys.length - 1]] = value;
+                },
+
+                getFilteredFlags() {
+                    if (this.flagFilter === 'All') return this.flaggedModels;
+                    return this.flaggedModels.filter(flag => {
+                        try {
+                            const reason = JSON.parse(flag.new_value).reason;
+                            if (this.flagFilter === 'Unsorted') {
+                                return !this.standardCategories.includes(reason);
+                            }
+                            return reason === this.flagFilter;
+                        } catch (e) { return this.flagFilter === 'Unsorted'; } // if parsing fails, treat as unsorted/legacy
+                    });
+                },
+
+                getFilteredTrash() {
+                    if (this.trashFilter === 'All') return this.trash;
+                    return this.trash.filter(model => {
+                        if (this.trashFilter === 'Unsorted') {
+                            return !model.flag_reason || !this.standardCategories.includes(model.flag_reason);
+                        }
+                        return model.flag_reason === this.trashFilter;
+                    });
                 }
             }
         }

@@ -10,7 +10,7 @@ document.addEventListener('alpine:init', () => {
 
         // Flagging State
         flagModalOpen: false,
-        flagReason: 'Irrelevant',
+        flagReason: 'Irrelevant/ Spam',
         flagComment: '',
         isFlagged: false, // Visual cue state
         flagId: null, // Track the specific edit ID for this flag
