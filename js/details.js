@@ -60,7 +60,14 @@ document.addEventListener('alpine:init', () => {
             console.log("Final card_data:", this.model.card_data);
 
             // Check for existing flag
-            if (this.user) {
+            // 1. Check if the model itself is flagged (Visible to everyone)
+            if (this.model.is_flagged) {
+                this.isFlagged = true;
+            }
+
+            // 2. (Optional) If you want to allow the user to Unflag their OWN report, 
+            // you still need to find their specific edit ID.
+            if (this.user && this.isFlagged) {
                 const { data: flags } = await sbClient.from('model_edits')
                     .select('id')
                     .eq('model_id', this.model.id)
@@ -69,8 +76,7 @@ document.addEventListener('alpine:init', () => {
                     .maybeSingle();
 
                 if (flags) {
-                    this.isFlagged = true;
-                    this.flagId = flags.id;
+                    this.flagId = flags.id; // Store ID so they can unflag it later
                 }
             }
 
@@ -219,8 +225,14 @@ document.addEventListener('alpine:init', () => {
             if (!confirm("Remove your flag?")) return;
 
             try {
+                // 1. Delete the log entry
                 const { error } = await sbClient.from('model_edits').delete().eq('id', this.flagId);
                 if (error) throw error;
+
+                // 2. NEW: Reset the public model status
+                await sbClient.from('models')
+                    .update({ is_flagged: false, flag_reason: null })
+                    .eq('id', this.model.id);
 
                 this.isFlagged = false;
                 this.flagId = null;
@@ -248,9 +260,17 @@ document.addEventListener('alpine:init', () => {
 
                 if (error) throw error;
 
-                // Success State (Visual Cue)
+                // 2. NEW: Update the public model status so EVERYONE sees it
+                const { error: modelError } = await sbClient
+                    .from('models')
+                    .update({ is_flagged: true, flag_reason: this.flagReason })
+                    .eq('id', this.model.id);
+
+                if (modelError) throw modelError;
+
+                // Success State
                 this.isFlagged = true;
-                this.flagId = data.id; // Store ID for unflagging
+                this.flagId = data.id;
                 this.flagModalOpen = false;
                 this.flagComment = '';
 
