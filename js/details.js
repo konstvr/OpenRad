@@ -131,6 +131,18 @@ document.addEventListener('alpine:init', () => {
             // 2. Priority: DOI Field
             if (ref.DOI) {
                 const doi = ref.DOI.trim();
+
+                // PubMed Central (PMC) ID
+                if (doi.toUpperCase().startsWith('PMC')) {
+                    return 'https://www.ncbi.nlm.nih.gov/pmc/articles/' + doi + '/';
+                }
+
+                // PubMed ID (PMID)
+                if (doi.toUpperCase().startsWith('PMID:')) {
+                    const pmid = doi.split(':')[1].trim();
+                    return 'https://pubmed.ncbi.nlm.nih.gov/' + pmid + '/';
+                }
+
                 // Standard DOI
                 if (doi.startsWith('10.')) return 'https://doi.org/' + doi;
                 // Direct URL (e.g. arXiv)
