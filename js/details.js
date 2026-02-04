@@ -383,7 +383,7 @@ document.addEventListener('alpine:init', () => {
                 validRepoLink && validDemoLink;
         },
 
-        async saveChanges() {
+        async saveChanges(shouldVerify = true) {
             if (!this.user) return;
 
             const fields = [
@@ -428,18 +428,28 @@ document.addEventListener('alpine:init', () => {
                 }
             }
 
-            const { error } = await sbClient.from('models').update({
-                card_data: this.draft,
-                is_verified: true,
-                verified_by: this.user.id,
-                verification_date: new Date()
-            }).eq('id', this.model.id);
+            // Prepare Update Payload
+            const updatePayload = {
+                card_data: this.draft
+            };
+
+            // Only add verification data if requested
+            if (shouldVerify) {
+                updatePayload.is_verified = true;
+                updatePayload.verified_by = this.user.id;
+                updatePayload.verification_date = new Date();
+            }
+
+            const { error } = await sbClient.from('models').update(updatePayload).eq('id', this.model.id);
 
             if (!error) {
                 this.model.card_data = this.draft;
-                this.model.is_verified = true;
-                this.editMode = false;
-                alert('Verified & Saved!');
+                if (shouldVerify) {
+                    this.model.is_verified = true;
+                    alert('Verified & Saved!');
+                } else {
+                    alert('Changes Saved (Not Verified)!');
+                }
             } else {
                 alert('Save failed: ' + error.message);
             }
