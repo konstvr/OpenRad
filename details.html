@@ -32,7 +32,7 @@
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
 
     <script src="js/app.js?v=486fd6d"></script>
-    <script src="js/details.js?v=486fd6d"></script>
+    <script src="js/details.js?v=fix_paper_link_v1"></script>
 
     <div x-data="detailsApp" class="max-w-6xl mx-auto px-4 py-8">
 
@@ -135,6 +135,12 @@
                                         </path>
                                     </svg> Paper
                                 </a>
+                            </template>
+                            <template x-if="!getPaperLink() && getRawDOI()">
+                                <div
+                                    class="px-4 py-2 bg-slate-100 dark:bg-slate-700/50 text-slate-500 rounded-lg text-xs font-mono border border-slate-200 dark:border-slate-600">
+                                    DOI: <span x-text="getRawDOI()"></span>
+                                </div>
                             </template>
 
                             <template x-if="getDemoLink()">
@@ -413,7 +419,13 @@
 
                             <div>
                                 <div class="flex justify-between items-end mb-1">
-                                    <label class="text-xs font-bold uppercase text-slate-500">Manual Paper Link</label>
+                                    <label class="text-xs font-bold uppercase text-slate-500">
+                                        Manual Paper Link
+                                        <template x-if="!getPaperLink() && getRawDOI()">
+                                            <span class="lowercase font-medium"
+                                                x-text="'(Raw ID: ' + getRawDOI() + ')'"></span>
+                                        </template>
+                                    </label>
                                     <select x-model="severities['Model.Descriptors.References.0.PaperLink']"
                                         class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
                                         <option value="minor">Severity: Minor</option>

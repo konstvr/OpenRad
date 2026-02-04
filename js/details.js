@@ -115,6 +115,12 @@ document.addEventListener('alpine:init', () => {
             return [val];
         },
 
+        getRawDOI() {
+            const refs = this.model.card_data.Model.Descriptors?.References;
+            if (!refs || refs.length === 0) return null;
+            return refs[0].DOI || null;
+        },
+
         getPaperLink() {
             const refs = this.model.card_data.Model.Descriptors?.References;
             if (!refs || refs.length === 0) return null;
