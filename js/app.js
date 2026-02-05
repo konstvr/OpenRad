@@ -7,6 +7,10 @@ const SUPABASE_KEY = 'sb_publishable_uzQs9fk-6ZTeu4RSJ3wHgw_1KMskJ9-';
 const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const MODALITY_CODES = ["CT", "FL", "MR", "NM", "PET", "US", "XR", "DXA"];
+const SUBSPECIALTY_CODES = [
+    "AB", "BR", "CA", "CH", "ER", "GI", "GU", "HN", "IR", "MI",
+    "MK", "NR", "OB", "OI", "OT", "PD", "QI", "RS", "VI"
+];
 const USE_CATEGORIES = ["Classification", "Detection", "Segmentation", "Foundation", "LLM", "Generative", "Other"];
 const FULL_MAPPING = {
     "BR": "Breast", "BQ": "Biomarkers", "CA": "Cardiac Radiology", "CH": "Chest Radiology",

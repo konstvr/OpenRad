@@ -31,7 +31,7 @@
 
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
 
-    <script src="js/app.js?v=d0f2b21"></script>
+    <script src="js/app.js?v=d0f2b22"></script>
     <script src="js/details.js?v=d0f2b21"></script>
 
     <div x-data="detailsApp" class="max-w-6xl mx-auto px-4 py-8">
@@ -516,6 +516,51 @@
                                     class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
                             </div>
 
+                            <div class="md:col-span-2">
+                                <div class="flex justify-between items-end mb-2">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Modality (Select all that
+                                        apply)</label>
+                                    <select x-model="severities['Model.Indexing.Content']"
+                                        class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <div class="flex flex-wrap gap-3">
+                                    <template x-for="code in MODALITY_CODES">
+                                        <label
+                                            class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+                                            <input type="checkbox" :value="code" x-model="draft._selectedModalities"
+                                                class="w-4 h-4 text-violet-600 rounded border-slate-300 dark:border-slate-500 focus:ring-violet-500">
+                                            <span class="text-sm text-slate-700 dark:text-slate-300"
+                                                x-text="FULL_MAPPING[code] || code"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <div class="flex justify-between items-end mb-2">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Subspecialty (Select all
+                                        that apply)</label>
+                                    <select x-model="severities['Model.Indexing.Content']"
+                                        class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <div class="flex flex-wrap gap-3">
+                                    <template x-for="code in SUBSPECIALTY_CODES">
+                                        <label
+                                            class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+                                            <input type="checkbox" :value="code" x-model="draft._selectedSpecialties"
+                                                class="w-4 h-4 text-violet-600 rounded border-slate-300 dark:border-slate-500 focus:ring-violet-500">
+                                            <span class="text-sm text-slate-700 dark:text-slate-300"
+                                                x-text="FULL_MAPPING[code] || code"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
                             <div class="md:col-span-2">
                                 <div class="flex justify-between items-end mb-2">
                                     <label class="text-xs font-bold uppercase text-slate-500">Use Cases (Select all that

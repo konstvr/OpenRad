@@ -358,6 +358,13 @@ document.addEventListener('alpine:init', () => {
                         this.draft.Model.Descriptors.References[0].PaperLink = existingLink;
                     }
                 }
+
+                // [NEW] Split Indexing.Content into Modalities and Specialties
+                const content = this.draft.Model.Indexing?.Content || [];
+                // Ensure array
+                const contentArray = Array.isArray(content) ? content : [content];
+                this.draft._selectedModalities = contentArray.filter(c => MODALITY_CODES.includes(c));
+                this.draft._selectedSpecialties = contentArray.filter(c => SUBSPECIALTY_CODES.includes(c));
             }
         },
 
@@ -400,6 +407,24 @@ document.addEventListener('alpine:init', () => {
         async saveChanges(shouldVerify = true) {
             if (!this.user) return;
 
+            // [NEW] Merge Modalities and Specialties back into Content
+            // Preserve any existing codes that are NOT in our managed lists (to be safe)
+            const originalContent = this.draft.Model.Indexing?.Content || [];
+            const otherCodes = Array.isArray(originalContent)
+                ? originalContent.filter(c => !MODALITY_CODES.includes(c) && !SUBSPECIALTY_CODES.includes(c))
+                : [];
+
+            // Combine all
+            const newContent = [
+                ...otherCodes,
+                ...(this.draft._selectedModalities || []),
+                ...(this.draft._selectedSpecialties || [])
+            ];
+
+            // Assign back to draft
+            if (!this.draft.Model.Indexing) this.draft.Model.Indexing = {};
+            this.draft.Model.Indexing.Content = newContent;
+
             const fields = [
                 { path: 'Model.Name', old: this.model.card_data.Model.Name, new: this.draft.Model.Name },
                 { path: 'Model.Link', old: this.model.card_data.Model.Link, new: this.draft.Model.Link },
@@ -425,7 +450,9 @@ document.addEventListener('alpine:init', () => {
                 { path: 'Model.Model properties.Limitations', old: this.model.card_data.Model['Model properties'].Limitations, new: this.draft.Model['Model properties'].Limitations },
                 { path: 'Model.Model properties.Use', old: this.model.card_data.Model['Model properties'].Use, new: this.draft.Model['Model properties'].Use },
                 { path: 'Model.Model properties.Validation', old: this.model.card_data.Model['Model properties'].Validation, new: this.draft.Model['Model properties'].Validation },
-                { path: 'Model.Model properties.Regulatory information.Comment', old: this.model.card_data.Model['Model properties']['Regulatory information']?.Comment, new: this.draft.Model['Model properties']['Regulatory information']?.Comment }
+                { path: 'Model.Model properties.Regulatory information.Comment', old: this.model.card_data.Model['Model properties']['Regulatory information']?.Comment, new: this.draft.Model['Model properties']['Regulatory information']?.Comment },
+                // [NEW] Merged Content field
+                { path: 'Model.Indexing.Content', old: this.model.card_data.Model.Indexing?.Content, new: this.draft.Model.Indexing.Content }
             ];
 
             for (const f of fields) {
