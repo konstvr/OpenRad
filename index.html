@@ -225,13 +225,33 @@
                     </aside>
 
                     <div class="flex-1">
-                        <div class="flex justify-between items-end mb-4 px-1">
+                        <div x-show="!loading" class="flex justify-between items-end mb-4 px-1">
                             <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">Results</h2>
                             <span class="text-xs font-bold bg-violet-100 text-violet-700 px-2 py-1 rounded-full"
                                 x-text="filteredModels.length + ' Models Found'">
                             </span>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                        <!-- Skeleton Loader -->
+                        <div x-show="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <template x-for="i in 6" :key="i">
+                                <div
+                                    class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 h-64 animate-pulse">
+                                    <div class="h-6 bg-slate-200 dark:bg-slate-700 rounded w-3/4 mb-4"></div>
+                                    <div class="flex gap-2 mb-4">
+                                        <div class="h-4 bg-slate-100 dark:bg-slate-700 rounded w-16"></div>
+                                        <div class="h-4 bg-slate-100 dark:bg-slate-700 rounded w-16"></div>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <div class="h-3 bg-slate-100 dark:bg-slate-700 rounded w-full"></div>
+                                        <div class="h-3 bg-slate-100 dark:bg-slate-700 rounded w-full"></div>
+                                        <div class="h-3 bg-slate-100 dark:bg-slate-700 rounded w-2/3"></div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <div x-show="!loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
                             <template x-for="item in visibleModels" :key="item.id">
                                 <div @click="goToDetails(item.id)"
