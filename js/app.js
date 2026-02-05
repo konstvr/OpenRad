@@ -159,27 +159,31 @@ function dashboardApp() {
                 console.log(`[Fetch] Raw items fetched: ${allData.length}`);
 
                 allData.forEach(item => {
-                    // [FIX] Ensure card_data is an object (handle stringified JSON from Admin actions)
-                    if (item.card_data && typeof item.card_data === 'string') {
+                    // [FIX] Robust JSON parsing (handles potential double-stringification)
+                    let parseAttempts = 0;
+                    while (item.card_data && typeof item.card_data === 'string' && parseAttempts < 5) {
                         try {
                             item.card_data = JSON.parse(item.card_data);
                         } catch (e) {
-                            console.warn("Failed to parse card_data for ID:", item.id);
-                            item.card_data = null;
+                            console.warn("Failed to parse card_data for ID:", item.id, e);
+                            break;
                         }
+                        parseAttempts++;
                     }
 
                     // [SOFT DELETE FILTER] Skip items marked as deleted or invalid
                     if (!item.card_data || item.card_data._deleted === true || item.card_data._deleted === "true" || item.card_data._deleted_at) return;
 
+                    // [PRE-CALCULATE ATLAS STATUS] Robust check for sorting
+                    const atlasLink = item.card_data?.Model?.atlas_link || item.card_data?.atlas_link || item.atlas_link;
+                    item._has_atlas = !!(atlasLink && typeof atlasLink === 'string' && atlasLink.trim().toLowerCase().startsWith('http'));
+
                     if (item.id) {
-                        // Normalize ID to ensure uniqueness
                         const safeId = String(item.id).trim();
                         if (!uniqueData.has(safeId)) {
                             uniqueData.set(safeId, item);
                         } else {
                             duplicateCount++;
-                            // console.warn('Duplicate found:', safeId, item.card_data.Model.Name);
                         }
                     } else {
                         invalidCount++;
@@ -189,8 +193,24 @@ function dashboardApp() {
                 if (invalidCount > 0) console.warn(`[Fetch] Filtered ${invalidCount} items with missing IDs`);
                 if (duplicateCount > 0) console.warn(`[Fetch] Removed ${duplicateCount} duplicate items`);
 
-                this.allModels = Array.from(uniqueData.values());
-                console.log(`[Fetch] Final unique models: ${this.allModels.length}`);
+                // Convert to array and sort:
+                // 1. No Atlas Link First
+                // 2. Recent verification/creation (matching Admin logic)
+                this.allModels = Array.from(uniqueData.values()).sort((a, b) => {
+                    // Priority 1: No Atlas Link first
+                    if (a._has_atlas !== b._has_atlas) {
+                        return a._has_atlas ? 1 : -1;
+                    }
+
+                    // Priority 2: Recency (Verification Date or Created Date)
+                    // Note: Admin uses verification_date || created_at. We follow suit.
+                    const getSortDate = (item) => {
+                        return item.verification_date ? new Date(item.verification_date).getTime() : new Date(item.created_at).getTime();
+                    };
+
+                    return getSortDate(b) - getSortDate(a);
+                });
+                console.log(`[Fetch] Final unique models sorted: ${this.allModels.length}`);
 
             } catch (err) {
                 console.error("Error fetching models:", err);
