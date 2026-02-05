@@ -7,6 +7,7 @@ document.addEventListener('alpine:init', () => {
         draft: null,
         severities: {},
         copySuccess: false,
+        isAdmin: false,
 
         // Flagging State
         flagModalOpen: false,
@@ -22,6 +23,19 @@ document.addEventListener('alpine:init', () => {
             // Auth check
             const { data: { session } } = await sbClient.auth.getSession();
             this.user = session?.user;
+
+            // Check Admin Role
+            if (this.user) {
+                const { data: roleData } = await sbClient
+                    .from('user_roles')
+                    .select('role')
+                    .eq('id', this.user.id)
+                    .maybeSingle();
+
+                if (roleData && roleData.role === 'admin') {
+                    this.isAdmin = true;
+                }
+            }
 
             // Get ID from URL
             const id = new URLSearchParams(window.location.search).get('id');

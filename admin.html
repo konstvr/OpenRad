@@ -42,7 +42,7 @@
                 <div class="bg-slate-200 dark:bg-slate-800 p-1 rounded-lg flex text-sm font-bold">
                     <button @click="activeTab = 'edits'"
                         :class="activeTab==='edits' ? 'bg-white dark:bg-slate-600 shadow' : 'text-slate-500 hover:text-slate-800'"
-                        class="px-4 py-1.5 rounded-md transition">Edits</button>
+                        class="px-4 py-1.5 rounded-md transition">Verified Models</button>
                     <button @click="activeTab = 'users'"
                         :class="activeTab==='users' ? 'bg-white dark:bg-slate-600 shadow' : 'text-slate-500 hover:text-slate-800'"
                         class="px-4 py-1.5 rounded-md transition">Users</button>
@@ -83,17 +83,47 @@
                 <div
                     class="lg:col-span-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col h-[80vh]">
                     <div class="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
-                        <h3 class="font-bold text-sm uppercase text-slate-500">Modified Models</h3>
+                        <h3 class="font-bold text-sm uppercase text-slate-500 mb-2">Verified Models</h3>
+                        <div class="relative">
+                            <input x-model="searchQuery" type="text" placeholder="Search models..."
+                                class="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-violet-500 outline-none">
+                            <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
                     </div>
                     <div class="flex-1 overflow-y-auto p-2 space-y-1">
-                        <template x-for="m in modifiedModels" :key="m.id">
-                            <button @click="selectModel(m)"
-                                :class="selectedModel?.id === m.id ? 'bg-violet-50 dark:bg-violet-900/20 border-violet-500' : 'border-transparent hover:bg-slate-50 dark:hover:bg-slate-700/50'"
-                                class="w-full text-left p-3 rounded-lg border-l-4 transition text-sm">
-                                <div class="font-bold truncate" x-text="m.card_data.Model.Name"></div>
-                                <div class="text-xs text-slate-500 mt-1" x-text="editCounts[m.id] + ' changes'"></div>
+                        <template x-for="m in getFilteredModels()" :key="m.id">
+                            <button @click="selectModel(m)" :class="{
+                                    'bg-violet-50 dark:bg-violet-900/20 border-violet-500': selectedModel?.id === m.id,
+                                    'border-transparent hover:bg-slate-50 dark:hover:bg-slate-700/50': selectedModel?.id !== m.id,
+                                    'border-r-4 border-r-red-500': m.is_flagged
+                                }"
+                                class="w-full text-left p-3 rounded-lg border-l-4 transition text-sm relative group">
+                                <div class="flex justify-between items-start">
+                                    <div class="font-bold truncate pr-2" x-text="m.card_data.Model.Name"></div>
+                                    <div x-show="m.is_flagged" class="text-red-500" title="Flagged">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd"
+                                                d="M3 6a3 3 0 013-3h10a1 1 0 01.8 1.6L14.25 8l2.55 3.4A1 1 0 0116 12H6a1 1 0 00-1 1v3a1 1 0 11-2 0V6z"
+                                                clip-rule="evenodd"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <div x-show="editCounts[m.id]"
+                                        class="text-xs px-1.5 py-0.5 bg-violet-100 text-violet-700 rounded font-bold"
+                                        x-text="editCounts[m.id] + ' edit' + (editCounts[m.id] > 1 ? 's' : '')"></div>
+                                    <div class="text-xs text-slate-500 truncate"
+                                        x-text="m.verified_by_user ? '✓ ' + m.verified_by_user : 'Not verified'"></div>
+                                </div>
                             </button>
                         </template>
+                        <div x-show="getFilteredModels().length === 0" class="text-center text-slate-400 text-sm py-4">
+                            No models found.
+                        </div>
                     </div>
                 </div>
 
@@ -104,8 +134,39 @@
                             <div
                                 class="p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-between">
                                 <h2 class="text-xl font-bold" x-text="selectedModel.card_data.Model.Name"></h2>
-                                <button @click="revertModel()"
-                                    class="text-xs bg-red-100 text-red-700 px-3 py-1 rounded font-bold hover:bg-red-200">Revert</button>
+                                <div class="flex gap-2 items-center">
+                                    <a :href="'details.html?id=' + selectedModel.id" target="_blank"
+                                        class="text-xs text-violet-600 hover:text-violet-800 font-bold flex items-center gap-1 mr-2">
+                                        Open Public Page
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14">
+                                            </path>
+                                        </svg>
+                                    </a>
+                                    <button x-show="selectedModel.is_verified" @click="unverifyModel()"
+                                        class="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded font-bold hover:bg-amber-200 transition">Unverify</button>
+                                    <button @click="revertModel()"
+                                        class="text-xs bg-red-100 text-red-700 px-3 py-1 rounded font-bold hover:bg-red-200 transition">Revert
+                                        Changes</button>
+                                </div>
+                            </div>
+                            <!-- Flag Warning -->
+                            <div x-show="selectedModel.is_flagged"
+                                class="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                                <svg class="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="currentColor"
+                                    viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                                        clip-rule="evenodd"></path>
+                                </svg>
+                                <div>
+                                    <h4 class="text-sm font-bold text-red-800 uppercase">Model is Flagged</h4>
+                                    <div class="text-sm text-red-700 mt-1">
+                                        Reason: <span class="font-bold"
+                                            x-text="selectedModel.flag_reason || 'Not specified'"></span>
+                                    </div>
+                                </div>
                             </div>
                             <div class="flex-1 overflow-y-auto p-6 space-y-4">
                                 <template x-for="edit in currentEdits" :key="edit.id">
@@ -339,13 +400,14 @@
             return {
                 user: null, isAdmin: false, activeTab: 'edits',
                 // Data
-                allModels: [], allEdits: [], modifiedModels: [], editCounts: {}, selectedModel: null, currentEdits: [],
+                allModels: [], allEdits: [], verifiedModels: [], editCounts: {}, selectedModel: null, currentEdits: [],
                 flaggedModels: [], trash: [], // Initialize to avoid undefined errors
                 userList: [], adminIds: [],
                 flagFilter: 'All',
                 trashFilter: 'All',
                 filterOptions: ['All', 'Irrelevant/ Spam', 'Database', 'No code', 'Other', 'Unsorted'],
                 standardCategories: ['Irrelevant/ Spam', 'Database', 'No code', 'Other'],
+                searchQuery: '',
 
                 async init() {
                     if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
@@ -384,6 +446,9 @@
 
                 async loadEdits() {
                     this.loading = true;
+                    // Load Users first if not loaded, to resolve verifier names
+                    if (this.userList.length === 0) await this.loadUsers();
+
                     let allData = [];
                     let from = 0;
                     const batchSize = 1000;
@@ -415,24 +480,60 @@
                         if (typeof cd === 'string') {
                             try { cd = JSON.parse(cd); } catch (e) { cd = null; }
                         }
-                        return { ...m, card_data: cd };
+
+                        // Resolve verifier name
+                        let verifierName = null;
+                        if (m.is_verified && m.verified_by) {
+                            verifierName = this.getUserName(m.verified_by);
+                        }
+
+                        return { ...m, card_data: cd, verified_by_user: verifierName };
                     });
                     const { data: edits } = await sbClient.from('model_edits').select('*').order('created_at', { ascending: false });
                     this.allEdits = edits || [];
                     this.editCounts = {};
 
-                    // Identify Flagged IDs to exclude from Review Queue
-                    const flaggedIds = new Set(this.allEdits.filter(e => e.field_path === '__FLAG__').map(e => e.model_id));
-
+                    // Calculate edit counts
                     this.allEdits.forEach(e => {
                         if (e.field_path !== '__FLAG__') {
                             this.editCounts[e.model_id] = (this.editCounts[e.model_id] || 0) + 1;
                         }
                     });
 
-                    // Filter: Must have edits AND NOT be flagged
-                    this.modifiedModels = this.allModels.filter(m => this.editCounts[m.id] && !flaggedIds.has(m.id));
+                    // FILTER: Verified Models OR Models with Edits
+                    // "verifiedModels" is the list we display in the sidebar
+                    // Strict check: must strictly be verified OR have >0 edits
+                    this.verifiedModels = this.allModels.filter(m =>
+                        ((m.is_verified === true) || (this.editCounts[m.id] && this.editCounts[m.id] > 0))
+                        && !m.card_data?._deleted // exclude trash
+                    );
+
                     this.loading = false;
+                },
+
+                getFilteredModels() {
+                    let filtered = this.verifiedModels;
+
+                    if (this.searchQuery) {
+                        const q = this.searchQuery.toLowerCase();
+                        filtered = filtered.filter(m =>
+                            m.card_data?.Model?.Name?.toLowerCase().includes(q)
+                        );
+                    }
+
+                    // Sort: Newest First (Sort by edit date or verification date)
+                    // We can use updated_at if available, or just put ones with edits on top?
+                    // User request: "higher go the most recent models"
+                    // Let's rely on `created_at` or `verification_date` if recent.
+                    // But actually, `allModels` from DB doesn't guarantee order if we fetch in batches? 
+                    // Let's sort filtered list dynamically.
+                    return filtered.sort((a, b) => {
+                        // Priority 1: Has unreviewed edits? (Maybe too complex for now, just stick to time)
+                        // Use verification_date or created_at
+                        const dateA = new Date(a.verification_date || a.created_at);
+                        const dateB = new Date(b.verification_date || b.created_at);
+                        return dateB - dateA; // Descending
+                    });
                 },
 
                 async loadFlags() {
@@ -610,6 +711,42 @@
                     } catch (err) {
                         console.error(err);
                         alert("Error dismissing: " + err.message);
+                    }
+                },
+
+                async unverifyModel() {
+                    if (!this.selectedModel) return;
+                    if (!confirm(`Unverify "${this.selectedModel.card_data.Model.Name}"?\nIt will remain in the Verified List if it has edits, otherwise it might drop off.`)) return;
+
+                    try {
+                        const { error } = await sbClient
+                            .from('models')
+                            .update({
+                                is_verified: false,
+                                verified_by: null,
+                                verification_date: null
+                            })
+                            .eq('id', this.selectedModel.id);
+
+                        if (error) throw error;
+
+                        // Update local state
+                        this.selectedModel.is_verified = false;
+                        this.selectedModel.verified_by = null;
+                        this.selectedModel.verification_date = null;
+                        this.selectedModel.verified_by_user = null;
+
+                        // Re-run filter logic (might remove it from info list if it has no edits)
+                        // "verifiedModels" is the list we display in the sidebar
+                        this.verifiedModels = this.allModels.filter(m =>
+                            (m.is_verified === true || this.editCounts[m.id])
+                            && !m.card_data?._deleted
+                        );
+
+                        alert("Model unverified.");
+                    } catch (err) {
+                        console.error(err);
+                        alert("Error unverifying: " + err.message);
                     }
                 },
 
