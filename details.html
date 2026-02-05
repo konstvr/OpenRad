@@ -50,8 +50,9 @@
                     class="px-4 py-2 rounded-lg font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
                     My Dashboard
                 </a>
-                <button @click="toggleEdit()"
-                    class="px-4 py-2 rounded-lg font-bold transition text-sm shadow-sm flex items-center gap-2"
+                <button @click="toggleEdit()" :disabled="isFlagged"
+                    :title="isFlagged ? 'Cannot edit flagged models' : ''"
+                    class="px-4 py-2 rounded-lg font-bold transition text-sm shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     :class="editMode ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-violet-600 text-white hover:bg-violet-700'">
                     <svg x-show="!editMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -381,7 +382,10 @@
                                     </select>
                                 </div>
                                 <input type="text" x-model="draft.Model.Link"
-                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                                    :class="!isValidUrl(draft.Model.Link) ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 dark:border-slate-600 focus:ring-violet-500'"
+                                    class="w-full p-2.5 border rounded-lg text-sm bg-white dark:bg-slate-800 outline-none transition-colors">
+                                <p x-show="!isValidUrl(draft.Model.Link)" class="text-[10px] text-red-500 mt-1">Please
+                                    enter a valid URL</p>
                             </div>
 
                             <div x-show="draft.Model.Link && draft.Model.Link.length > 0">
@@ -414,7 +418,10 @@
                                 <input type="text"
                                     x-model="draft.Model['Model properties'].repository_analysis.demo_link"
                                     placeholder="https://huggingface.co/..."
-                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                                    :class="!isValidUrl(draft.Model['Model properties'].repository_analysis.demo_link) ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 dark:border-slate-600 focus:ring-violet-500'"
+                                    class="w-full p-2.5 border rounded-lg text-sm bg-white dark:bg-slate-800 outline-none transition-colors">
+                                <p x-show="!isValidUrl(draft.Model['Model properties'].repository_analysis.demo_link)"
+                                    class="text-[10px] text-red-500 mt-1">Please enter a valid URL</p>
                             </div>
 
                             <div>
@@ -434,7 +441,10 @@
                                 </div>
                                 <input type="text" x-model="draft.Model.Descriptors.References[0].PaperLink"
                                     placeholder="https://arxiv.org/..."
-                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                                    :class="!isValidUrl(draft.Model.Descriptors.References[0].PaperLink) ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 dark:border-slate-600 focus:ring-violet-500'"
+                                    class="w-full p-2.5 border rounded-lg text-sm bg-white dark:bg-slate-800 outline-none transition-colors">
+                                <p x-show="!isValidUrl(draft.Model.Descriptors.References[0].PaperLink)"
+                                    class="text-[10px] text-red-500 mt-1">Please enter a valid URL</p>
                                 <p class="text-[10px] text-slate-500 mt-1">If set, this overrides the standard DOI link.
                                 </p>
                             </div>

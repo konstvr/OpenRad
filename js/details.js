@@ -300,6 +300,10 @@ document.addEventListener('alpine:init', () => {
 
         // --- EDIT LOGIC ---
         toggleEdit() {
+            if (this.isFlagged && !this.editMode) {
+                alert("Cannot edit a flagged model.");
+                return;
+            }
             this.editMode = !this.editMode;
             if (this.editMode) {
                 this.draft = JSON.parse(JSON.stringify(this.model.card_data));
@@ -343,24 +347,40 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        isValidUrl(str) {
+            if (!str || str.trim().length === 0) return true; // Empty is handled by isFormValid requirements
+            try {
+                const url = new URL(str);
+                return url.protocol === 'http:' || url.protocol === 'https:';
+            } catch (_) {
+                return false;
+            }
+        },
+
         isFormValid() {
             if (!this.draft) return false;
 
             // Check Repository Link
-            const hasRepoLink = this.draft.Model.Link && this.draft.Model.Link.trim().length > 0;
+            const repoLink = this.draft.Model.Link;
+            const hasRepoLink = repoLink && repoLink.trim().length > 0;
+            const validRepoLink = !hasRepoLink || this.isValidUrl(repoLink);
 
             // Check Demo Link
-            const hasDemoLink = this.draft.Model['Model properties']?.repository_analysis?.demo_link &&
-                this.draft.Model['Model properties'].repository_analysis.demo_link.trim().length > 0;
+            const demoLink = this.draft.Model['Model properties']?.repository_analysis?.demo_link;
+            const hasDemoLink = demoLink && demoLink.trim().length > 0;
+            const validDemoLink = !hasDemoLink || this.isValidUrl(demoLink);
 
             // Check Paper Link
             const refs = this.draft.Model.Descriptors?.References;
-            const hasPaperLink = refs && refs.length > 0 &&
-                refs[0].PaperLink &&
-                refs[0].PaperLink.trim().length > 0;
+            const paperLink = refs && refs.length > 0 ? refs[0].PaperLink : null;
+            const hasPaperLink = paperLink && paperLink.trim().length > 0;
+            const validPaperLink = !hasPaperLink || this.isValidUrl(paperLink);
 
             // Logic: Paper Link IS REQUIRED + (Repo Link OR Demo Link)
-            return hasPaperLink && (hasRepoLink || hasDemoLink);
+            // AND all provided links must be valid URLs
+            return hasPaperLink && validPaperLink &&
+                (hasRepoLink || hasDemoLink) &&
+                validRepoLink && validDemoLink;
         },
 
         async saveChanges() {
