@@ -314,7 +314,7 @@ document.addEventListener('alpine:init', () => {
 
         // --- EDIT LOGIC ---
         toggleEdit() {
-            if (this.isFlagged && !this.editMode) {
+            if (this.isFlagged && !this.editMode && !this.isAdmin) {
                 alert("Cannot edit a flagged model.");
                 return;
             }

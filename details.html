@@ -50,8 +50,8 @@
                     class="px-4 py-2 rounded-lg font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
                     My Dashboard
                 </a>
-                <button @click="toggleEdit()" :disabled="isFlagged"
-                    :title="isFlagged ? 'Cannot edit flagged models' : ''"
+                <button @click="toggleEdit()" :disabled="isFlagged && !isAdmin"
+                    :title="isFlagged && !isAdmin ? 'Cannot edit flagged models' : ''"
                     class="px-4 py-2 rounded-lg font-bold transition text-sm shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     :class="editMode ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-violet-600 text-white hover:bg-violet-700'">
                     <svg x-show="!editMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -458,8 +458,8 @@
                                         <option value="major">Severity: Major</option>
                                     </select>
                                 </div>
-                                <input type="text" x-model="draft.Model['Model properties'].Architecture"
-                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                                <textarea x-model="draft.Model['Model properties'].Architecture" rows="3"
+                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
                             </div>
 
                             <div>
@@ -471,8 +471,8 @@
                                         <option value="major">Severity: Major</option>
                                     </select>
                                 </div>
-                                <input type="text" x-model="draft.Model['Model properties'].Dataset"
-                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                                <textarea x-model="draft.Model['Model properties'].Dataset" rows="3"
+                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
                             </div>
 
                             <div class="md:col-span-2">
