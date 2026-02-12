@@ -189,6 +189,17 @@ document.addEventListener('alpine:init', () => {
             return null;
         },
 
+        getAtlasLink() {
+            if (!this.model) return null;
+            // Check for atlas_link in multiple possible locations
+            const atlasLink = this.model.card_data?.Model?.atlas_link || this.model.card_data?.atlas_link;
+
+            if (atlasLink && typeof atlasLink === 'string' && atlasLink.startsWith('http')) {
+                return atlasLink;
+            }
+            return null;
+        },
+
         // --- ACTIONS ---
         downloadJson() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.model.card_data, null, 4));
