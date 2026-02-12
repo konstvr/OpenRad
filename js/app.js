@@ -28,6 +28,7 @@ const FULL_MAPPING = {
 document.addEventListener('alpine:init', () => {
     Alpine.store('auth', {
         user: null,
+        isAdmin: false,
         loading: true,
         modalOpen: false,
         email: '',
@@ -36,8 +37,35 @@ document.addEventListener('alpine:init', () => {
         async init() {
             const { data: { session } } = await sbClient.auth.getSession();
             this.user = session?.user || null;
-            sbClient.auth.onAuthStateChange((_event, session) => {
+
+            // Check Admin Role
+            if (this.user) {
+                const { data: roleData } = await sbClient
+                    .from('user_roles')
+                    .select('role')
+                    .eq('id', this.user.id)
+                    .maybeSingle();
+
+                if (roleData && roleData.role === 'admin') {
+                    this.isAdmin = true;
+                }
+            }
+
+            sbClient.auth.onAuthStateChange(async (_event, session) => {
                 this.user = session?.user || null;
+                this.isAdmin = false;
+
+                if (this.user) {
+                    const { data: roleData } = await sbClient
+                        .from('user_roles')
+                        .select('role')
+                        .eq('id', this.user.id)
+                        .maybeSingle();
+
+                    if (roleData && roleData.role === 'admin') {
+                        this.isAdmin = true;
+                    }
+                }
             });
             this.loading = false;
         },
@@ -97,6 +125,7 @@ function dashboardApp() {
         filterVerified: false,
         filterDemo: false,
         filterWeights: false,
+        filterAtlas: false,
         selectedSpecialties: [],
         selectedModalities: [],
         selectedUses: [],
@@ -245,6 +274,7 @@ function dashboardApp() {
             this.filterVerified = false;
             this.filterDemo = false;
             this.filterWeights = false;
+            this.filterAtlas = false;
             this.selectedSpecialties = [];
             this.selectedModalities = [];
             this.selectedUses = [];
@@ -260,7 +290,7 @@ function dashboardApp() {
         },
 
         get isFiltered() {
-            return this.searchQuery || this.filterVerified || this.filterDemo || this.filterWeights ||
+            return this.searchQuery || this.filterVerified || this.filterDemo || this.filterWeights || this.filterAtlas ||
                 this.selectedSpecialties.length || this.selectedModalities.length || this.selectedUses.length;
         },
 
@@ -334,6 +364,8 @@ function dashboardApp() {
                 if (this.filterWeights && !checkWeights(row.card_data)) return false;
                 if (this.filterDemo && !checkDemo(row.card_data)) return false;
 
+                if (this.filterAtlas && !row._has_atlas) return false;
+
                 // 3. Lists
                 const content = m.Indexing?.Content || [];
                 if (this.selectedModalities.length > 0 && !this.selectedModalities.some(x => content.includes(x))) return false;
@@ -368,14 +400,8 @@ function dashboardApp() {
                 return;
             }
 
-            // Check for atlas_link in multiple possible locations
-            const atlasLink = model?.card_data?.Model?.atlas_link || model?.card_data?.atlas_link;
-
-            if (atlasLink && typeof atlasLink === 'string' && atlasLink.startsWith('http')) {
-                window.location.href = atlasLink;
-            } else {
-                window.location.href = `details.html?id=${id}`;
-            }
+            // ATLAS Redirect Removed - Always open details
+            window.location.href = `details.html?id=${id}`;
         },
         updateCharts() { renderDashboardCharts(this.allModels); }
     }

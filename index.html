@@ -195,6 +195,16 @@
                                     Demo</span>
                                 <input type="checkbox" x-model="filterDemo" class="w-4 h-4 text-blue-600 rounded">
                             </label>
+                            <template x-if="$store.auth.isAdmin">
+                                <label
+                                    class="flex items-center justify-between p-2.5 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800 cursor-pointer hover:border-indigo-300 transition">
+                                    <span
+                                        class="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">ATLAS
+                                        Models (Admin)</span>
+                                    <input type="checkbox" x-model="filterAtlas"
+                                        class="w-4 h-4 text-indigo-600 rounded">
+                                </label>
+                            </template>
                         </div>
 
                         <div class="space-y-6">
