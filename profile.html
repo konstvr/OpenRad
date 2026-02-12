@@ -36,7 +36,7 @@
 
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
 
-    <script src="js/app.js?v=d0f2b23"></script>
+    <script src="js/app.js?v=d0f2b25"></script>
 
     <div x-data="profileApp()" x-init="init()" class="max-w-5xl mx-auto px-4 py-8">
 
@@ -360,10 +360,30 @@
                 },
 
                 async loadProfileData() {
-                    const { data: active } = await sbClient.from('models').select('*').eq('assigned_to', this.user.id).eq('is_verified', false).limit(1);
+                    // Fetch Active Task (Limit 1, so * is okay, but explicit is better)
+                    const { data: active } = await sbClient
+                        .from('models')
+                        .select('id, card_data, is_verified, assigned_to')
+                        .eq('assigned_to', this.user.id)
+                        .eq('is_verified', false)
+                        .limit(1);
                     this.activeTask = active && active.length > 0 ? active[0] : null;
 
-                    const { data: hist } = await sbClient.from('models').select('*').eq('verified_by', this.user.id).eq('is_verified', true).order('verification_date', { ascending: false });
+                    // Fetch History (Simplified - Avoid fetching full card_data for list)
+                    // We only need model name, id, verification_date
+                    // But we used card_data.Model.Name in HTML. 
+                    // To optimize, we still fetch card_data but we rely on the fact that history is usually small per user. 
+                    // Alternatively, we could create a view/RPC, but per-user history is usually < 1000 items. 
+                    // Let's at least order it and limit to recent 100 initially if needed, 
+                    // or just select specific fields if we had a flat table. Since it's JSON, we have to fetch it.
+                    // But we can limit the columns.
+                    const { data: hist } = await sbClient
+                        .from('models')
+                        .select('id, card_data, verification_date, verified_by, is_verified')
+                        .eq('verified_by', this.user.id)
+                        .eq('is_verified', true)
+                        .order('verification_date', { ascending: false });
+
                     this.history = hist || [];
                     this.stats.verified = this.history.length;
 

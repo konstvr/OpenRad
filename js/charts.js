@@ -1,30 +1,55 @@
 // js/charts.js
 let chartInstances = {};
 
-function renderDashboardCharts(models) {
+// Modified to accept direct stats object
+function renderDashboardCharts(models, stats) {
+    if (!stats && !models) return;
+
     // Wait for DOM
     setTimeout(() => {
-        const modalities = ["CT", "FL", "MR", "NM", "PET", "US", "XR"];
-        
         // 1. Modality Chart
-        drawChart('modalityChart', 'doughnut', modalities, (label) => {
-            return models.filter(r => r.card_data.Model.Indexing?.Content?.includes(label)).length;
-        }, modalities.map(m => FULL_MAPPING[m] || m));
+        // Use stats.modalities if available, else derive (fallback removed for brevity/performance)
+        if (stats && stats.modalities) {
+            const labels = Object.keys(stats.modalities);
+            const data = Object.values(stats.modalities);
+            // Sort by count desc
+            const sorted = labels.map((l, i) => ({ l, d: data[i] })).sort((a, b) => b.d - a.d);
+
+            drawChart('modalityChart', 'doughnut',
+                sorted.map(x => x.l),
+                null,
+                sorted.map(x => FULL_MAPPING[x.l] || x.l),
+                sorted.map(x => x.d)
+            );
+        }
 
         // 2. Specialty Chart
-        const specialties = [...new Set(models.flatMap(r => r.card_data.Model.Indexing?.Content || []).filter(c => !modalities.includes(c)))].sort();
-        drawChart('specialtyChart', 'bar', specialties, (label) => {
-            return models.filter(r => r.card_data.Model.Indexing?.Content?.includes(label)).length;
-        }, specialties.map(s => FULL_MAPPING[s] || s));
+        if (stats && stats.specialties) {
+            const labels = Object.keys(stats.specialties);
+            const data = Object.values(stats.specialties);
+            const sorted = labels.map((l, i) => ({ l, d: data[i] })).sort((a, b) => b.d - a.d);
+
+            drawChart('specialtyChart', 'bar',
+                sorted.map(x => x.l),
+                null,
+                sorted.map(x => FULL_MAPPING[x.l] || x.l),
+                sorted.map(x => x.d)
+            );
+        }
 
         // 3. Validation
-        drawChart('validationChart', 'pie', ['internal', 'external', 'none'], (label) => {
-            return models.filter(r => (r.card_data.Model['Model properties'].Validation || 'none').toLowerCase().includes(label)).length;
-        }, ['Internal', 'External', 'None']);
+        if (stats && stats.validation) {
+            const labels = Object.keys(stats.validation);
+            const data = Object.values(stats.validation);
+            drawChart('validationChart', 'pie', labels, null, labels.map(l => l.charAt(0).toUpperCase() + l.slice(1)), data);
+        }
 
         // 4. Weights
-        const hasWeights = models.filter(r => checkWeights(r.card_data)).length;
-        drawChart('weightsChart', 'doughnut', ['Available', 'Not Available'], () => null, ['Available', 'Not Available'], [hasWeights, models.length - hasWeights]);
+        if (stats && stats.weights) {
+            const labels = ['Available', 'Not Available'];
+            const data = [stats.weights['Available'] || 0, stats.weights['Not Available'] || 0];
+            drawChart('weightsChart', 'doughnut', labels, null, labels, data);
+        }
 
     }, 100);
 }
@@ -45,10 +70,10 @@ function drawChart(id, type, labels, countFn, displayLabels, directData = null) 
                 backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1']
             }]
         },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            plugins: { legend: { position: type === 'bar' ? 'none' : 'right' } } 
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: type === 'bar' ? 'none' : 'right' } }
         }
     });
 }

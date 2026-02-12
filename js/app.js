@@ -37,8 +37,17 @@ document.addEventListener('alpine:init', () => {
         async init() {
             const { data: { session } } = await sbClient.auth.getSession();
             this.user = session?.user || null;
+            this.updateAdminStatus();
 
-            // Check Admin Role
+            sbClient.auth.onAuthStateChange(async (_event, session) => {
+                this.user = session?.user || null;
+                this.updateAdminStatus();
+            });
+            this.loading = false;
+        },
+
+        async updateAdminStatus() {
+            this.isAdmin = false;
             if (this.user) {
                 const { data: roleData } = await sbClient
                     .from('user_roles')
@@ -50,24 +59,6 @@ document.addEventListener('alpine:init', () => {
                     this.isAdmin = true;
                 }
             }
-
-            sbClient.auth.onAuthStateChange(async (_event, session) => {
-                this.user = session?.user || null;
-                this.isAdmin = false;
-
-                if (this.user) {
-                    const { data: roleData } = await sbClient
-                        .from('user_roles')
-                        .select('role')
-                        .eq('id', this.user.id)
-                        .maybeSingle();
-
-                    if (roleData && roleData.role === 'admin') {
-                        this.isAdmin = true;
-                    }
-                }
-            });
-            this.loading = false;
         },
 
         async handleAuth() {
@@ -91,23 +82,24 @@ document.addEventListener('alpine:init', () => {
     });
 });
 
-// --- UTILS ---
-function checkWeights(modelData) {
-    const props = modelData.Model?.['Model properties'] || modelData['Model properties'];
-    const repo = props?.repository_analysis;
-    return repo && (repo.contains_weights === 'yes' || repo.contains_weights === true);
+// --- HELPER FUNCTIONS ---
+function checkWeights(card_data) {
+    if (!card_data || !card_data.Model) return false;
+    const props = card_data.Model['Model properties'] || {};
+    const repo = props.repository_analysis || {};
+    return repo.contains_weights === 'yes' || repo.contains_weights === true;
 }
 
-function checkDemo(modelData) {
-    const props = modelData.Model?.['Model properties'] || modelData['Model properties'];
-    const repo = props?.repository_analysis;
+function checkDemo(card_data) {
+    if (!card_data || !card_data.Model) return false;
+    // Check root, model root, or repository analysis
+    const link = card_data.demo_link ||
+        card_data.Model.demo_link ||
+        (card_data.Model['Model properties']?.repository_analysis?.demo_link);
 
-    // 1. Get the link from Deep Path (Priority) or Legacy/Root Paths
-    let link = repo?.demo_link || modelData.demo_link || modelData.Model?.demo_link;
-
-    // 2. Strict Validation: Must be a string AND start with http/https
     return typeof link === 'string' && /^https?:\/\//i.test(link.trim());
 }
+
 
 // --- MAIN APP LOGIC ---
 function dashboardApp() {
@@ -115,13 +107,16 @@ function dashboardApp() {
         darkMode: localStorage.getItem('theme') === 'dark',
         currentTab: 'browse',
         loading: true,
-        allModels: [],
-        searchQuery: '',
+        models: [], // Current page of models
+        totalModels: 0,
 
-        // PAGINATION / SCROLL STATE
-        displayLimit: 100,
+        // PAGINATION
+        currentPage: 1,
+        pageSize: 18, // Multiple of 1, 2, 3 for grid
+        hasMore: true,
 
         // FILTERS
+        searchQuery: '',
         filterVerified: false,
         filterDemo: false,
         filterWeights: false,
@@ -129,121 +124,101 @@ function dashboardApp() {
         selectedSpecialties: [],
         selectedModalities: [],
         selectedUses: [],
+
+        // Constants for UI
         codeMap: FULL_MAPPING,
+        // Pre-defined lists for filter UI (Client-side static lists are better for UX than dynamic scan)
+        availableModalities: MODALITY_CODES,
+        availableSpecialties: SUBSPECIALTY_CODES, // Or we could use Object.keys(FULL_MAPPING) filtering out modalities
+        availableUses: USE_CATEGORIES,
+
+        // Stats Cache
+        stats: null,
+        statsCounts: {}, // To store filter counts if needed, or simplified
 
         async initApp() {
             if (this.darkMode) document.documentElement.classList.add('dark');
-
-            // 1. WAIT for the session to load from LocalStorage
-            // This ensures Supabase has the user's token before we ask for data.
             await sbClient.auth.getSession();
 
-            // 2. Fetch data immediately
-            await this.fetchData();
+            // Initial Fetch
+            await this.fetchModels(true);
+            this.fetchStats(); // Fire and forget
 
-            // 3. Optional: Listen for login events to re-fetch automatically
-            // This fixes the issue where logging in didn't update the list immediately
-            sbClient.auth.onAuthStateChange((event) => {
-                if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-                    this.fetchData();
-                }
-            });
+            // Setup Search Debounce
+            this.$watch('searchQuery', () => this.debouncedFetch());
+
+            // Watch filters to trigger refetch
+            ['filterVerified', 'filterDemo', 'filterWeights', 'filterAtlas',
+                'selectedSpecialties', 'selectedModalities', 'selectedUses'].forEach(prop => {
+                    this.$watch(prop, () => this.fetchModels(true));
+                });
         },
 
-        // New helper function to handle fetching
-        async fetchData() {
+        debouncedFetch: Alpine.debounce(function () {
+            this.fetchModels(true);
+        }, 500),
+
+        async fetchModels(reset = false) {
+            if (this.loading && !reset) return; // Prevent parallel fetches
+
             this.loading = true;
-            let allData = [];
-            let from = 0;
-            const batchSize = 1000; // Supabase default safe size
-            let done = false;
+
+            if (reset) {
+                this.currentPage = 1;
+                this.models = [];
+                this.hasMore = true;
+            }
+
+            if (!this.hasMore && !reset) {
+                this.loading = false;
+                return;
+            }
 
             try {
-                while (!done) {
-                    // Fetch range: 0-999, then 1000-1999, etc.
-                    let { data, error } = await sbClient
-                        .from('models')
-                        .select('*')
-                        .order('created_at', { ascending: false })
-                        .range(from, from + batchSize - 1);
+                // Construct Filters
+                const filters = {
+                    verified: this.filterVerified,
+                    weights: this.filterWeights,
+                    demo: this.filterDemo,
+                    atlas: this.filterAtlas,
+                    modalities: this.selectedModalities,
+                    specialties: this.selectedSpecialties,
+                    uses: this.selectedUses
+                };
 
-                    if (error) throw error;
+                const { data, error } = await sbClient.rpc('get_model_previews', {
+                    p_page: this.currentPage,
+                    p_page_size: this.pageSize,
+                    p_search: this.searchQuery,
+                    p_filters: filters
+                });
 
-                    if (data && data.length > 0) {
-                        allData = allData.concat(data);
-                        from += batchSize;
+                if (error) throw error;
 
-                        // If we received fewer rows than we asked for, we reached the end.
-                        if (data.length < batchSize) {
-                            done = true;
-                        }
-                    } else {
-                        // No data returned, we are done.
-                        done = true;
-                    }
+                // Transform Data
+                const newModels = data.map(row => ({
+                    id: row.id,
+                    created_at: row.created_at,
+                    is_verified: row.is_verified,
+                    card_data: row.preview_data // Use the pre-processed JSON from RPC
+                }));
+
+                if (reset) {
+                    this.models = newModels;
+                    this.totalModels = data.length > 0 ? data[0].total_count : 0;
+                } else {
+                    // Check for duplicates before appending (Safety net)
+                    const existingIds = new Set(this.models.map(m => m.id));
+                    const uniqueNew = newModels.filter(m => !existingIds.has(m.id));
+                    this.models = [...this.models, ...uniqueNew];
                 }
 
-                // Success: We now have the full dataset
-                // [FIX] Deduplicate AND Filter invalid IDs (Strict)
-                const uniqueData = new Map();
-                let invalidCount = 0;
-                let duplicateCount = 0;
-
-                console.log(`[Fetch] Raw items fetched: ${allData.length}`);
-
-                allData.forEach(item => {
-                    // [FIX] Robust JSON parsing (handles potential double-stringification)
-                    let parseAttempts = 0;
-                    while (item.card_data && typeof item.card_data === 'string' && parseAttempts < 5) {
-                        try {
-                            item.card_data = JSON.parse(item.card_data);
-                        } catch (e) {
-                            console.warn("Failed to parse card_data for ID:", item.id, e);
-                            break;
-                        }
-                        parseAttempts++;
-                    }
-
-                    // [SOFT DELETE FILTER] Skip items marked as deleted or invalid
-                    if (!item.card_data || item.card_data._deleted === true || item.card_data._deleted === "true" || item.card_data._deleted_at) return;
-
-                    // [PRE-CALCULATE ATLAS STATUS] Robust check for sorting
-                    const atlasLink = item.card_data?.Model?.atlas_link || item.card_data?.atlas_link || item.atlas_link;
-                    item._has_atlas = !!(atlasLink && typeof atlasLink === 'string' && atlasLink.trim().toLowerCase().startsWith('http'));
-
-                    if (item.id) {
-                        const safeId = String(item.id).trim();
-                        if (!uniqueData.has(safeId)) {
-                            uniqueData.set(safeId, item);
-                        } else {
-                            duplicateCount++;
-                        }
-                    } else {
-                        invalidCount++;
-                    }
-                });
-
-                if (invalidCount > 0) console.warn(`[Fetch] Filtered ${invalidCount} items with missing IDs`);
-                if (duplicateCount > 0) console.warn(`[Fetch] Removed ${duplicateCount} duplicate items`);
-
-                // Convert to array and sort:
-                // 1. No Atlas Link First
-                // 2. Recent verification/creation (matching Admin logic)
-                this.allModels = Array.from(uniqueData.values()).sort((a, b) => {
-                    // Priority 1: No Atlas Link first
-                    if (a._has_atlas !== b._has_atlas) {
-                        return a._has_atlas ? 1 : -1;
-                    }
-
-                    // Priority 2: Recency (Verification Date or Created Date)
-                    // Note: Admin uses verification_date || created_at. We follow suit.
-                    const getSortDate = (item) => {
-                        return item.verification_date ? new Date(item.verification_date).getTime() : new Date(item.created_at).getTime();
-                    };
-
-                    return getSortDate(b) - getSortDate(a);
-                });
-                console.log(`[Fetch] Final unique models sorted: ${this.allModels.length}`);
+                // Check if we reached the end
+                if (newModels.length < this.pageSize) {
+                    this.hasMore = false;
+                } else {
+                    this.currentPage++;
+                }
 
             } catch (err) {
                 console.error("Error fetching models:", err);
@@ -252,6 +227,26 @@ function dashboardApp() {
             }
         },
 
+        async fetchStats() {
+            try {
+                const { data, error } = await sbClient.rpc('get_dashboard_stats');
+                if (error) throw error;
+                this.stats = data;
+
+                // Update Helper Counts for UI (Optional, if we want badges on filters)
+                // This is a trade-off: Server stats are global, not filtered. 
+                // We'll map them to the UI logic.
+                // For now, we update charts.
+                if (window.renderDashboardCharts) {
+                    window.renderDashboardCharts(null, this.stats); // Pass stats directly
+                }
+
+            } catch (err) {
+                console.error("Error fetching stats:", err);
+            }
+        },
+
+        // --- UI HELPERS ---
         toggleTheme() {
             this.darkMode = !this.darkMode;
             document.documentElement.classList.toggle('dark');
@@ -259,12 +254,11 @@ function dashboardApp() {
         },
 
         toggleFilter(arrayName, item) {
-            const idx = this[arrayName].indexOf(item);
-            if (idx === -1) this[arrayName].push(item);
-            else this[arrayName].splice(idx, 1);
-
-            // Reset scroll when filtering changes so user starts at top
-            this.displayLimit = 100;
+            const arr = this[arrayName];
+            const idx = arr.indexOf(item);
+            if (idx === -1) arr.push(item);
+            else arr.splice(idx, 1);
+            // Watcher triggers fetch
         },
 
         getFilterArray(name) { return this[name]; },
@@ -278,14 +272,13 @@ function dashboardApp() {
             this.selectedSpecialties = [];
             this.selectedModalities = [];
             this.selectedUses = [];
-            this.displayLimit = 100; // Reset pagination
         },
 
         // Scroll Handler (Infinite Scroll)
         handleScroll() {
             const bottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 500;
-            if (bottom && this.displayLimit < this.filteredModels.length) {
-                this.displayLimit += 50; // Load 50 more
+            if (bottom && this.hasMore && !this.loading) {
+                this.fetchModels(false);
             }
         },
 
@@ -294,115 +287,45 @@ function dashboardApp() {
                 this.selectedSpecialties.length || this.selectedModalities.length || this.selectedUses.length;
         },
 
-        // --- HELPER FOR ARRAYS ---
-        asArray(val) {
-            if (!val) return [];
-            return Array.isArray(val) ? val : [val];
-        },
-
-        // --- DYNAMIC LISTS ---
-        extractCodes(condition) {
-            const s = new Set();
-            this.allModels.forEach(row => {
-                const val = row.card_data.Model.Indexing?.Content;
-                if (val) val.forEach(c => condition(c) && s.add(c));
-            });
-            return Array.from(s).sort();
-        },
-        get availableSpecialties() { return this.extractCodes(c => !MODALITY_CODES.includes(c)); },
-        get availableModalities() { return this.extractCodes(c => MODALITY_CODES.includes(c)); },
-
-        get availableUses() {
-            const s = new Set();
-            this.allModels.forEach(r => {
-                const uses = this.asArray(r.card_data.Model['Model properties'].Use);
-                let hasValidCategory = false;
-                uses.forEach(u => {
-                    const cleanU = u.trim();
-                    if (USE_CATEGORIES.includes(cleanU)) {
-                        s.add(cleanU);
-                        hasValidCategory = true;
-                    }
-                });
-                if (!hasValidCategory) s.add("Other");
-            });
-            return Array.from(s).sort();
-        },
-
-        getCount(val, type) {
-            if (type === 'Use Case') {
-                return this.allModels.filter(r => {
-                    const uses = this.asArray(r.card_data.Model['Model properties'].Use).map(u => u.trim());
-                    if (val === "Other") return uses.length === 0 || !uses.some(u => USE_CATEGORIES.includes(u));
-                    return uses.includes(val);
-                }).length;
-            }
-            return this.allModels.filter(r => r.card_data.Model.Indexing?.Content?.includes(val)).length;
-        },
-
-        // --- DISPLAY HELPERS (NEW) ---
+        // --- DISPLAY HELPERS ---
+        // Compatible with existing HTML which calls these
         getModalities(item) {
-            const content = item.card_data.Model.Indexing?.Content || [];
-            return content.filter(c => MODALITY_CODES.includes(c));
+            return item.card_data.Model.Indexing?.Content || [];
         },
 
         getSpecialties(item) {
-            const content = item.card_data.Model.Indexing?.Content || [];
-            return content.filter(c => !MODALITY_CODES.includes(c)).map(c => FULL_MAPPING[c] || c);
+            return (item.card_data.Model.Indexing?.Content || [])
+                .filter(c => !MODALITY_CODES.includes(c))
+                .map(c => FULL_MAPPING[c] || c);
         },
 
-        // --- MAIN FILTER ---
-        get filteredModels() {
-            return this.allModels.filter(row => {
-                const m = row.card_data.Model;
-
-                // 1. Search
-                if (this.searchQuery && !JSON.stringify(m).toLowerCase().includes(this.searchQuery.toLowerCase())) return false;
-
-                // 2. Toggles
-                if (this.filterVerified && !row.is_verified) return false;
-                if (this.filterWeights && !checkWeights(row.card_data)) return false;
-                if (this.filterDemo && !checkDemo(row.card_data)) return false;
-
-                if (this.filterAtlas && !row._has_atlas) return false;
-
-                // 3. Lists
-                const content = m.Indexing?.Content || [];
-                if (this.selectedModalities.length > 0 && !this.selectedModalities.some(x => content.includes(x))) return false;
-                if (this.selectedSpecialties.length > 0 && !this.selectedSpecialties.some(x => content.includes(x))) return false;
-
-                // 4. Use Case Filter (AND Logic)
-                if (this.selectedUses.length > 0) {
-                    const modelUses = this.asArray(m['Model properties'].Use).map(u => u.trim());
-                    const matchesAll = this.selectedUses.every(filter => {
-                        if (filter === "Other") return modelUses.length === 0 || !modelUses.some(u => USE_CATEGORIES.includes(u));
-                        return modelUses.includes(filter);
-                    });
-                    if (!matchesAll) return false;
-                }
-
-                return true;
-            });
+        // Get count for filter badges (using global stats to avoid heavy query)
+        getCount(val, type) {
+            if (!this.stats) return 0;
+            if (type === 'Modality') return this.stats.modalities?.[val] || 0;
+            if (type === 'Subspecialty') return this.stats.specialties?.[val] || 0;
+            if (type === 'Use Case') return this.stats.uses?.[val] || 0; // Uses might need mapping if keys differ
+            return 0;
         },
 
-        // --- VISIBLE SUBSET (PAGINATION) ---
-        get visibleModels() {
-            return this.filteredModels.slice(0, this.displayLimit);
-        },
-
+        // --- NAVIGATION ---
         goToDetails(id) {
-            // [FIX] Handle string vs number ID mismatch
-            const model = this.allModels.find(m => String(m.id) === String(id));
-
-            if (!model) {
-                console.warn(`[GoToDetails] Model not found for ID: ${id}`);
-                window.location.href = `details.html?id=${id}`;
-                return;
-            }
-
-            // ATLAS Redirect Removed - Always open details
             window.location.href = `details.html?id=${id}`;
         },
-        updateCharts() { renderDashboardCharts(this.allModels); }
+
+        updateCharts() {
+            // If stats already loaded, render. Else it waits for fetchStats.
+            if (this.stats) renderDashboardCharts(null, this.stats);
+        },
+
+        // Proxy for filteredModels used in HTML (mapped to current page models)
+        get filteredModels() {
+            return this.models;
+        },
+
+        // Proxy for visibleModels (same)
+        get visibleModels() {
+            return this.models;
+        }
     }
 }
