@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenRad - AI Model Registry</title>
+    <link rel="icon" href="data:,">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -224,8 +225,10 @@
                                                 <span
                                                     class="text-sm text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white"
                                                     x-text="codeMap[item] || item"></span>
-                                                <span class="text-[10px] text-slate-400 ml-auto"
-                                                    x-text="getCount(item, filter.title)"></span>
+                                                <template x-if="$store.auth.isAdmin">
+                                                    <span class="text-[10px] text-slate-400 ml-auto"
+                                                        x-text="getCount(item, filter.title)"></span>
+                                                </template>
                                             </label>
                                         </template>
                                     </div>
@@ -238,7 +241,7 @@
                         <div x-show="!loading" class="flex justify-between items-end mb-4 px-1">
                             <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">Results</h2>
                             <span class="text-xs font-bold bg-violet-100 text-violet-700 px-2 py-1 rounded-full"
-                                x-text="'Showing ' + filteredModels.length + ' Models'">
+                                x-text="'Showing ' + filteredModels.length + ' / ' + totalModels + ' Models'">
                             </span>
                         </div>
 
