@@ -22,7 +22,7 @@
 
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
 
-    <script src="js/app.js?v=ff2a408"></script>
+    <script src="js/app.js?v=ff2a409"></script>
 
     <div x-data="adminApp()" x-init="init()" class="max-w-7xl mx-auto px-4 py-8">
 
@@ -874,7 +874,11 @@
                         if (typeof model.card_data === 'string') newData = { ...JSON.parse(model.card_data), _deleted: false };
 
                         delete newData._deleted_at;
-                        const { error } = await sbClient.from('models').update({ card_data: newData }).eq('id', model.id);
+                        const { error } = await sbClient.from('models').update({
+                            card_data: newData,
+                            is_flagged: false,
+                            flag_reason: null
+                        }).eq('id', model.id);
                         if (error) throw error;
 
                         // UPDATE LOCAL STATE
@@ -911,7 +915,14 @@
 
                         const { error: updateError } = await sbClient
                             .from('models')
-                            .update({ card_data: updatedCard })
+                            .update({
+                                card_data: updatedCard,
+                                is_verified: false,
+                                verified_by: null,
+                                verification_date: null,
+                                is_flagged: false,
+                                flag_reason: null
+                            })
                             .eq('id', flag.model_id);
 
                         if (updateError) throw updateError;

@@ -31,8 +31,8 @@
 
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
 
-    <script src="js/app.js?v=ff2a408"></script>
-    <script src="js/details.js?v=ff2a408"></script>
+    <script src="js/app.js?v=ff2a409"></script>
+    <script src="js/details.js?v=ff2a409"></script>
 
     <div x-data="detailsApp" class="max-w-6xl mx-auto px-4 py-8">
 
@@ -50,9 +50,8 @@
                     class="px-4 py-2 rounded-lg font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
                     My Dashboard
                 </a>
-                <button @click="toggleEdit()" :disabled="isFlagged && !isAdmin"
-                    :title="isFlagged && !isAdmin ? 'Cannot edit flagged models' : ''"
-                    class="px-4 py-2 rounded-lg font-bold transition text-sm shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                <button @click="toggleEdit()"
+                    class="px-4 py-2 rounded-lg font-bold transition text-sm shadow-sm flex items-center gap-2"
                     :class="editMode ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-violet-600 text-white hover:bg-violet-700'">
                     <svg x-show="!editMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -91,6 +90,21 @@
                 class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
 
                 <div class="p-8 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                    <div x-show="isFlagged"
+                        class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-4">
+                        <svg class="w-6 h-6 text-red-500 shrink-0" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                            </path>
+                        </svg>
+                        <div>
+                            <h3 class="text-sm font-bold text-red-800 uppercase mb-1">This model has been flagged</h3>
+                            <p class="text-sm text-red-700">
+                                Reason: <span class="font-bold" x-text="model.flag_reason || 'Not specified'"></span>
+                            </p>
+                        </div>
+                    </div>
                     <div class="flex flex-col lg:flex-row justify-between items-start gap-6">
                         <div class="flex-1">
                             <div class="flex flex-wrap items-center gap-3 mb-3">

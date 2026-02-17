@@ -325,10 +325,12 @@ document.addEventListener('alpine:init', () => {
 
         // --- EDIT LOGIC ---
         toggleEdit() {
+            /*
             if (this.isFlagged && !this.editMode && !this.isAdmin) {
                 alert("Cannot edit a flagged model.");
                 return;
             }
+            */
             this.editMode = !this.editMode;
             if (this.editMode) {
                 this.draft = JSON.parse(JSON.stringify(this.model.card_data));
