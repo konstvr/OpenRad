@@ -376,6 +376,12 @@ document.addEventListener('alpine:init', () => {
                 const contentArray = Array.isArray(content) ? content : [content];
                 this.draft._selectedModalities = contentArray.filter(c => MODALITY_CODES.includes(c));
                 this.draft._selectedSpecialties = contentArray.filter(c => SUBSPECIALTY_CODES.includes(c));
+
+                // [NEW] Normalize Atlas Link to Model.atlas_link
+                const existingAtlas = this.getAtlasLink();
+                if (existingAtlas) {
+                    this.draft.Model.atlas_link = existingAtlas;
+                }
             }
         },
 
@@ -402,6 +408,11 @@ document.addEventListener('alpine:init', () => {
             const hasDemoLink = demoLink && demoLink.trim().length > 0;
             const validDemoLink = !hasDemoLink || this.isValidUrl(demoLink);
 
+            // Check Atlas Link
+            const atlasLink = this.draft.Model.atlas_link;
+            const hasAtlasLink = atlasLink && atlasLink.trim().length > 0;
+            const validAtlasLink = !hasAtlasLink || this.isValidUrl(atlasLink);
+
             // Check Paper Link
             const refs = this.draft.Model.Descriptors?.References;
             const paperLink = refs && refs.length > 0 ? refs[0].PaperLink : null;
@@ -412,7 +423,7 @@ document.addEventListener('alpine:init', () => {
             // AND all provided links must be valid URLs
             return hasPaperLink && validPaperLink &&
                 (hasRepoLink || hasDemoLink) &&
-                validRepoLink && validDemoLink;
+                validRepoLink && validDemoLink && validAtlasLink;
         },
 
         async saveChanges(shouldVerify = true) {
@@ -439,6 +450,7 @@ document.addEventListener('alpine:init', () => {
             const fields = [
                 { path: 'Model.Name', old: this.model.card_data.Model.Name, new: this.draft.Model.Name },
                 { path: 'Model.Link', old: this.model.card_data.Model.Link, new: this.draft.Model.Link },
+                { path: 'Model.atlas_link', old: this.getAtlasLink(), new: this.draft.Model.atlas_link },
                 {
                     path: 'Model.Model properties.repository_analysis.demo_link',
                     old: this.model.card_data.Model['Model properties']?.repository_analysis?.demo_link,
