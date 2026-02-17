@@ -469,6 +469,35 @@
 
                             <div>
                                 <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">DOI</label>
+                                    <select x-model="severities['Model.Descriptors.References.0.DOI']"
+                                        class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <input type="text" x-model="draft.Model.Descriptors.References[0].DOI"
+                                    placeholder="10.1007/..."
+                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Paper Title</label>
+                                    <select x-model="severities['Model.Descriptors.References.0.Title']"
+                                        class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <input type="text" x-model="draft.Model.Descriptors.References[0].Title"
+                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                            </div>
+
+
+
+                            <div>
+                                <div class="flex justify-between items-end mb-1">
                                     <label class="text-xs font-bold uppercase text-slate-500">
                                         Manual Paper Link
                                         <template x-if="!getPaperLink() && getRawDOI()">
@@ -490,6 +519,63 @@
                                     class="text-[10px] text-red-500 mt-1">Please enter a valid URL</p>
                                 <p class="text-[10px] text-slate-500 mt-1">If set, this overrides the standard DOI link.
                                 </p>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Authors (Separate by
+                                        semicolon ";")</label>
+                                    <select x-model="severities['Model.Descriptors.Authors']"
+                                        class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <input type="text" x-model="draft._authorsString"
+                                    placeholder="Jianbo Yuan; Haofu Liao..."
+                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Organizations (Separate by
+                                        semicolon ";")</label>
+                                    <select x-model="severities['Model.Descriptors.Organizations']"
+                                        class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <input type="text" x-model="draft._organizationsString"
+                                    placeholder="University of Rochester; Futurewei Technologies..."
+                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none">
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Funding</label>
+                                    <select x-model="severities['Model.Descriptors.Funding']"
+                                        class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <textarea x-model="draft.Model.Descriptors.Funding" rows="2"
+                                    placeholder="Supported by..."
+                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs font-bold uppercase text-slate-500">Sustainability</label>
+                                    <select x-model="severities['Model.Model properties.Sustainability']"
+                                        class="text-xs py-1 px-2 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:outline-none focus:border-violet-500 text-slate-700 dark:text-slate-200">
+                                        <option value="minor">Severity: Minor</option>
+                                        <option value="major">Severity: Major</option>
+                                    </select>
+                                </div>
+                                <textarea x-model="draft.Model['Model properties'].Sustainability" rows="2"
+                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
                             </div>
 
                             <div>

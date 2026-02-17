@@ -218,6 +218,13 @@ document.addEventListener('alpine:init', () => {
                     Model: {
                         Name: this.model.card_data.Model.Name,
                         Link: this.model.card_data.Model.Link,
+                        "Indexing": this.model.card_data.Model.Indexing,
+                        "Descriptors": {
+                            Authors: this.model.card_data.Model.Descriptors?.Authors || [],
+                            Organizations: this.model.card_data.Model.Descriptors?.Organizations || [],
+                            Funding: this.model.card_data.Model.Descriptors?.Funding || "",
+                            References: this.model.card_data.Model.Descriptors?.References || []
+                        },
                         "Model properties": {
                             Architecture: this.model.card_data.Model['Model properties'].Architecture,
                             Dataset: this.model.card_data.Model['Model properties'].Dataset,
@@ -225,13 +232,16 @@ document.addEventListener('alpine:init', () => {
                             Limitations: this.model.card_data.Model['Model properties'].Limitations,
                             Use: this.model.card_data.Model['Model properties'].Use,
                             Validation: this.model.card_data.Model['Model properties'].Validation,
+                            Sustainability: this.model.card_data.Model['Model properties'].Sustainability || "",
                             "Regulatory information": {
                                 "Comment": this.model.card_data.Model['Model properties']['Regulatory information']?.Comment || ""
-                            }
+                            },
+                            repository_analysis: this.model.card_data.Model['Model properties'].repository_analysis
                         },
                         "Model performance": {
                             Comments: this.model.card_data.Model['Model performance']?.Comments || ""
-                        }
+                        },
+                        atlas_link: this.model.card_data.Model.atlas_link
                     }
                 };
 
@@ -349,6 +359,13 @@ document.addEventListener('alpine:init', () => {
                 if (!this.draft.Model['Model performance']) this.draft.Model['Model performance'] = { Comments: '' };
                 if (!this.draft.Model['Model properties']) this.draft.Model['Model properties'] = {};
                 if (!this.draft.Model['Model properties']['Regulatory information']) this.draft.Model['Model properties']['Regulatory information'] = { Comment: '' };
+                // [NEW] Ensure Sustainability field exists
+                if (!this.draft.Model['Model properties'].Sustainability) {
+                    this.draft.Model['Model properties'].Sustainability = '';
+                } else if (this.draft.Model['Model properties'].Sustainability.trim() === 'Hardware: . Time:') {
+                    // [FIX] Clear "template" data if it matches the common placeholder
+                    this.draft.Model['Model properties'].Sustainability = '';
+                }
 
                 // Sanitize Use Case (Filter invalid options)
                 const validOptions = ['Classification', 'Detection', 'Segmentation', 'Foundation', 'LLM', 'Generative', 'Other'];
@@ -370,6 +387,24 @@ document.addEventListener('alpine:init', () => {
                     if (existingLink) {
                         this.draft.Model.Descriptors.References[0].PaperLink = existingLink;
                     }
+                }
+
+                // [NEW] Ensure DOI, Title exist
+                if (!this.draft.Model.Descriptors.References[0].DOI) this.draft.Model.Descriptors.References[0].DOI = '';
+                if (!this.draft.Model.Descriptors.References[0].Title) this.draft.Model.Descriptors.References[0].Title = '';
+
+                // [NEW] Handle Authors and Organizations (Array of Objects form) -> String form
+                this.draft._authorsString = (this.draft.Model.Descriptors.Authors || [])
+                    .map(a => a.Name)
+                    .join('; ');
+
+                this.draft._organizationsString = (this.draft.Model.Descriptors.Organizations || [])
+                    .map(o => o.Name)
+                    .join('; ');
+
+                // Ensure Funding field exists
+                if (!this.draft.Model.Descriptors.Funding) {
+                    this.draft.Model.Descriptors.Funding = '';
                 }
 
                 // [NEW] Split Indexing.Content into Modalities and Specialties
@@ -449,6 +484,18 @@ document.addEventListener('alpine:init', () => {
             if (!this.draft.Model.Indexing) this.draft.Model.Indexing = {};
             this.draft.Model.Indexing.Content = newContent;
 
+            // [NEW] Parse Authors and Organizations Strings back to Arrays
+            const parseListToObjects = (str) => {
+                if (!str) return [];
+                return str.split(';')
+                    .map(s => s.trim())
+                    .filter(s => s.length > 0)
+                    .map(name => ({ Name: name }));
+            };
+
+            this.draft.Model.Descriptors.Authors = parseListToObjects(this.draft._authorsString);
+            this.draft.Model.Descriptors.Organizations = parseListToObjects(this.draft._organizationsString);
+
             const fields = [
                 { path: 'Model.Name', old: this.model.card_data.Model.Name, new: this.draft.Model.Name },
                 { path: 'Model.Link', old: this.model.card_data.Model.Link, new: this.draft.Model.Link },
@@ -467,6 +514,36 @@ document.addEventListener('alpine:init', () => {
                     path: 'Model.Descriptors.References.0.PaperLink',
                     old: this.model.card_data.Model.Descriptors?.References?.[0]?.PaperLink,
                     new: this.draft.Model.Descriptors.References[0].PaperLink
+                },
+                {
+                    path: 'Model.Descriptors.References.0.DOI',
+                    old: this.model.card_data.Model.Descriptors?.References?.[0]?.DOI,
+                    new: this.draft.Model.Descriptors.References[0].DOI
+                },
+                {
+                    path: 'Model.Descriptors.References.0.Title',
+                    old: this.model.card_data.Model.Descriptors?.References?.[0]?.Title,
+                    new: this.draft.Model.Descriptors.References[0].Title
+                },
+                {
+                    path: 'Model.Descriptors.Authors',
+                    old: this.model.card_data.Model.Descriptors?.Authors,
+                    new: this.draft.Model.Descriptors.Authors
+                },
+                {
+                    path: 'Model.Descriptors.Organizations',
+                    old: this.model.card_data.Model.Descriptors?.Organizations,
+                    new: this.draft.Model.Descriptors.Organizations
+                },
+                {
+                    path: 'Model.Descriptors.Funding',
+                    old: this.model.card_data.Model.Descriptors?.Funding,
+                    new: this.draft.Model.Descriptors.Funding
+                },
+                {
+                    path: 'Model.Model properties.Sustainability',
+                    old: this.model.card_data.Model['Model properties'].Sustainability,
+                    new: this.draft.Model['Model properties'].Sustainability
                 },
                 { path: 'Model.Model properties.Architecture', old: this.model.card_data.Model['Model properties'].Architecture, new: this.draft.Model['Model properties'].Architecture },
                 { path: 'Model.Model properties.Dataset', old: this.model.card_data.Model['Model properties'].Dataset, new: this.draft.Model['Model properties'].Dataset },
