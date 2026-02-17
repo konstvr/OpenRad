@@ -874,9 +874,7 @@
                         if (typeof model.card_data === 'string') newData = { ...JSON.parse(model.card_data), _deleted: false };
 
                         delete newData._deleted_at;
-                        const payload = JSON.stringify(newData);
-
-                        const { error } = await sbClient.from('models').update({ card_data: payload }).eq('id', model.id);
+                        const { error } = await sbClient.from('models').update({ card_data: newData }).eq('id', model.id);
                         if (error) throw error;
 
                         // UPDATE LOCAL STATE
@@ -911,11 +909,9 @@
                         updatedCard._deleted = true;
                         updatedCard._deleted_at = new Date();
 
-                        const payload = JSON.stringify(updatedCard);
-
                         const { error: updateError } = await sbClient
                             .from('models')
-                            .update({ card_data: payload })
+                            .update({ card_data: updatedCard })
                             .eq('id', flag.model_id);
 
                         if (updateError) throw updateError;
