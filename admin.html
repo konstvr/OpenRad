@@ -94,7 +94,7 @@
                     <div class="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
                         <h3 class="font-bold text-sm uppercase text-slate-500 mb-2">Verified Models</h3>
                         <div class="relative">
-                            <input x-model="searchQuery" type="text" placeholder="Search models..."
+                            <input x-model.debounce.500ms="searchQuery" type="text" placeholder="Search models..."
                                 class="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-violet-500 outline-none">
                             <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" fill="none"
                                 stroke="currentColor" viewBox="0 0 24 24">
@@ -103,7 +103,8 @@
                             </svg>
                         </div>
                     </div>
-                    <div class="flex-1 overflow-y-auto p-2 space-y-1">
+                    <div class="flex-1 overflow-y-auto p-2 space-y-1"
+                        @scroll="if($el.scrollTop + $el.clientHeight >= $el.scrollHeight - 50) loadMore()">
                         <template x-for="m in getFilteredModels()" :key="m.id">
                             <button @click="selectModel(m)" :class="{
                                     'bg-violet-50 dark:bg-violet-900/20 border-violet-500': selectedModel?.id === m.id,
@@ -130,7 +131,14 @@
                                 </div>
                             </button>
                         </template>
-                        <div x-show="getFilteredModels().length === 0" class="text-center text-slate-400 text-sm py-4">
+                        <div x-show="isLoadingMore" class="py-2 text-center text-xs text-slate-400">Loading more...
+                        </div>
+                        <button x-show="hasMore && !isLoadingMore" @click="loadMore()"
+                            class="w-full py-2 text-xs font-bold text-violet-600 hover:bg-violet-50 rounded">
+                            Load More
+                        </button>
+                        <div x-show="!isLoadingMore && getFilteredModels().length === 0"
+                            class="text-center text-slate-400 text-sm py-4">
                             No models found.
                         </div>
                     </div>
@@ -567,9 +575,16 @@
             return {
                 user: null, isAdmin: false, activeTab: 'edits',
                 // Data
-                allModels: [], allEdits: [], verifiedModels: [], editCounts: {}, selectedModel: null, currentEdits: [],
+                allModels: [], verifiedModels: [], editCounts: {}, selectedModel: null, currentEdits: [],
                 flaggedModels: [], trash: [], submissions: [], selectedSubmission: null, // Submissions
                 userList: [], adminIds: [],
+
+                // Pagination State
+                currentPage: 0,
+                hasMore: true,
+                isLoadingMore: false,
+                itemsPerPage: 10,
+                searchInput: '',
 
                 // Edit Mode State
                 editMode: false,
@@ -602,7 +617,15 @@
                 trashFilter: 'All',
                 filterOptions: ['All', 'Irrelevant/ Spam', 'Database', 'No code', 'Other', 'Unsorted'],
                 standardCategories: ['Irrelevant/ Spam', 'Database', 'No code', 'Other'],
-                searchQuery: '',
+
+                // Keep searchQuery separately for UI binding, but use internal input for API calls if needed
+                get searchQuery() { return this.searchInput },
+                set searchQuery(val) {
+                    this.searchInput = val;
+                    this.currentPage = 0;
+                    this.verifiedModels = [];
+                    this.fetchModels();
+                },
 
                 async init() {
                     if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
@@ -611,7 +634,9 @@
 
                     // Watch tab changes to lazy load or refresh data
                     this.$watch('activeTab', value => {
-                        if (value === 'edits') this.loadEdits();
+                        if (value === 'edits') {
+                            if (this.verifiedModels.length === 0) this.loadEdits();
+                        }
                         if (value === 'flags') this.loadFlags();
                         if (value === 'trash') this.loadTrash();
                         if (value === 'submissions') {
@@ -649,46 +674,7 @@
                     // Load Users first if not loaded, to resolve verifier names
                     if (this.userList.length === 0) await this.loadUsers();
 
-                    let allData = [];
-                    let from = 0;
-                    const batchSize = 1000;
-                    let done = false;
-
-                    try {
-                        while (!done) {
-                            const { data, error } = await sbClient
-                                .from('models')
-                                .select('*')
-                                .range(from, from + batchSize - 1);
-
-                            if (error) throw error;
-
-                            if (data && data.length > 0) {
-                                allData = allData.concat(data);
-                                from += batchSize;
-                                if (data.length < batchSize) done = true;
-                            } else {
-                                done = true;
-                            }
-                        }
-                    } catch (err) {
-                        console.error("Error loading full DB:", err);
-                        alert("Error loading full database: " + err.message);
-                    }
-                    this.allModels = allData.map(m => {
-                        let cd = m.card_data;
-                        if (typeof cd === 'string') {
-                            try { cd = JSON.parse(cd); } catch (e) { cd = null; }
-                        }
-
-                        // Resolve verifier name
-                        let verifierName = null;
-                        if (m.is_verified && m.verified_by) {
-                            verifierName = this.getUserName(m.verified_by);
-                        }
-
-                        return { ...m, card_data: cd, verified_by_user: verifierName };
-                    });
+                    // Load edits first to know which models have pending edits
                     const { data: edits } = await sbClient.from('model_edits').select('*').order('created_at', { ascending: false });
                     this.allEdits = edits || [];
                     this.editCounts = {};
@@ -700,40 +686,100 @@
                         }
                     });
 
-                    // FILTER: Verified Models OR Models with Edits
-                    // "verifiedModels" is the list we display in the sidebar
-                    // Strict check: must strictly be verified OR have >0 edits
-                    this.verifiedModels = this.allModels.filter(m =>
-                        ((m.is_verified === true) || (this.editCounts[m.id] && this.editCounts[m.id] > 0))
-                        && !m.card_data?._deleted // exclude trash
-                    );
+                    // Initial fetch of models
+                    this.currentPage = 0;
+                    this.verifiedModels = [];
+                    await this.fetchModels();
 
                     this.loading = false;
                 },
 
-                getFilteredModels() {
-                    let filtered = this.verifiedModels;
+                async fetchModels() {
+                    this.isLoadingMore = true;
+                    try {
+                        let query = sbClient
+                            .from('models')
+                            .select('*')
+                            .order('verification_date', { ascending: false, nullsFirst: false })
+                            .order('created_at', { ascending: false })
+                            .range(this.currentPage * this.itemsPerPage, (this.currentPage + 1) * this.itemsPerPage - 1);
 
-                    if (this.searchQuery) {
-                        const q = this.searchQuery.toLowerCase();
-                        filtered = filtered.filter(m =>
-                            m.card_data?.Model?.Name?.toLowerCase().includes(q)
-                        );
+                        // OR logic: verified=true OR has edits
+                        // Since Supabase .or() with complex cross-table filters is tricky in one go, 
+                        // and we want EITHER verified OR has_edits, let's simplify:
+                        // We fetch verified models, and if editCounts has keys, we ensure those are included?
+                        // Actually, the user wants "Verified Models" tab. 
+                        // Let's filter by verified only for now, OR valid items.
+                        // "Verified Models" usually means is_verified=true. 
+                        // But previous code showed `(m.is_verified === true) || (this.editCounts[m.id] > 0)`.
+                        // Supabase .or() syntax: .or('is_verified.eq.true,id.in.(' + Object.keys(this.editCounts).join(',') + ')')
+
+                        const editedIds = Object.keys(this.editCounts);
+                        let orClause = 'is_verified.eq.true';
+                        if (editedIds.length > 0) {
+                            orClause += `,id.in.(${editedIds.join(',')})`;
+                        }
+                        query = query.or(orClause);
+
+                        // NOT deleted
+                        // We can't easily query JSONB for _deleted without a specific operator or column.
+                        // Assuming most don't have _deleted. We'll filter client side if needed, but better to filter server side.
+                        // query = query.not('card_data->>_deleted', 'eq', 'true'); // If we could.
+                        // Let's trust they aren't deleted or just filter after fetch.
+
+                        if (this.searchInput) {
+                            // Search by Model Name in JSONB
+                            // Requires card_data->Model->>Name text search
+                            query = query.ilike('card_data->Model->>Name', `%${this.searchInput}%`);
+                        }
+
+                        const { data, error } = await query;
+                        if (error) throw error;
+
+                        if (data && data.length > 0) {
+                            const processed = data.map(m => {
+                                let cd = m.card_data;
+                                if (typeof cd === 'string') {
+                                    try { cd = JSON.parse(cd); } catch (e) { cd = null; }
+                                }
+                                return {
+                                    ...m,
+                                    card_data: cd,
+                                    verified_by_user: (m.is_verified && m.verified_by) ? this.getUserName(m.verified_by) : null
+                                };
+                            }).filter(m => !m.card_data?._deleted) // Client-side filter for trash safety
+                                .filter(m => !this.verifiedModels.some(vm => vm.id === m.id)); // Deduplicate!
+
+                            // Append to list
+                            this.verifiedModels = [...this.verifiedModels, ...processed];
+
+                            if (data.length < this.itemsPerPage) {
+                                this.hasMore = false;
+                            } else {
+                                this.hasMore = true;
+                            }
+                        } else {
+                            this.hasMore = false;
+                        }
+
+                    } catch (err) {
+                        console.error("Error fetching models:", err);
+                        alert("Error loading models: " + err.message);
+                    } finally {
+                        this.isLoadingMore = false;
                     }
+                },
 
-                    // Sort: Newest First (Sort by edit date or verification date)
-                    // We can use updated_at if available, or just put ones with edits on top?
-                    // User request: "higher go the most recent models"
-                    // Let's rely on `created_at` or `verification_date` if recent.
-                    // But actually, `allModels` from DB doesn't guarantee order if we fetch in batches? 
-                    // Let's sort filtered list dynamically.
-                    return filtered.sort((a, b) => {
-                        // Priority 1: Has unreviewed edits? (Maybe too complex for now, just stick to time)
-                        // Use verification_date or created_at
-                        const dateA = new Date(a.verification_date || a.created_at);
-                        const dateB = new Date(b.verification_date || b.created_at);
-                        return dateB - dateA; // Descending
-                    });
+                loadMore() {
+                    if (this.isLoadingMore || !this.hasMore) return;
+                    this.currentPage++;
+                    this.fetchModels();
+                },
+
+                getFilteredModels() {
+                    // Start with server-fetched models
+                    // Since search is now server-side, we just return the local list
+                    return this.verifiedModels;
                 },
 
                 async loadFlags() {
@@ -746,10 +792,29 @@
 
                         if (error) throw error;
 
-                        this.flaggedModels = flags.map(flag => {
-                            const model = this.allModels.find(m => m.id === flag.model_id);
-                            return { ...flag, modelName: model ? model.card_data.Model.Name : 'Unknown Model' };
-                        });
+                        this.flaggedModels = flags.map(flag => flag);
+
+                        // Fetch model names for flags
+                        // We need to fetch model names because allModels is no longer full
+                        if (this.flaggedModels.length > 0) {
+                            const ids = [...new Set(this.flaggedModels.map(f => f.model_id))];
+                            const { data: models } = await sbClient
+                                .from('models')
+                                .select('id, card_data')
+                                .in('id', ids);
+
+                            const modelMap = {};
+                            models?.forEach(m => {
+                                let cd = m.card_data;
+                                if (typeof cd === 'string') try { cd = JSON.parse(cd); } catch (e) { }
+                                modelMap[m.id] = cd?.Model?.Name || 'Unknown Model';
+                            });
+
+                            this.flaggedModels = this.flaggedModels.map(f => ({
+                                ...f,
+                                modelName: modelMap[f.model_id] || 'Unknown Model'
+                            }));
+                        }
                     } catch (err) {
                         console.error("Error loading flags:", err);
                     }
@@ -758,23 +823,25 @@
                 async loadTrash() {
                     this.loading = true;
                     try {
-                        // Ensure we have data
-                        if (this.allModels.length === 0) {
-                            await this.loadEdits();
-                        }
+                        // Use JSONB containment operator @>
+                        // "card_data" must be a JSONB column. 
+                        const { data, error } = await sbClient
+                            .from('models')
+                            .select('*')
+                            .contains('card_data', { _deleted: true });
 
-                        this.trash = this.allModels.map(m => {
+                        if (error) throw error;
+
+                        this.trash = (data || []).map(m => {
                             let cd = m.card_data;
                             if (typeof cd === 'string') {
                                 try { cd = JSON.parse(cd); } catch (e) { cd = null; }
                             }
                             return { ...m, card_data: cd };
-                        }).filter(m => {
-                            const cd = m.card_data;
-                            return cd && (cd._deleted === true || cd._deleted === "true" || cd._deleted_at);
                         });
                     } catch (err) {
                         console.error("Error loading trash:", err);
+                        alert("Error loading trash: " + err.message);
                     } finally {
                         this.loading = false;
                     }
@@ -828,10 +895,16 @@
                     if (!confirm("CONFIRM DELETION:\nThis will hide the model from the public site immediately.\n(Soft Delete)")) return;
 
                     try {
-                        const model = this.allModels.find(m => m.id === flag.model_id);
-                        if (!model) throw new Error("Model data not found locally");
+                        // Fetch model first since allModels is empty
+                        const { data: modelData, error: fetchError } = await sbClient
+                            .from('models')
+                            .select('*')
+                            .eq('id', flag.model_id)
+                            .single();
 
-                        let updatedCard = model.card_data;
+                        if (fetchError || !modelData) throw new Error("Model data not found in DB");
+
+                        let updatedCard = modelData.card_data;
                         if (typeof updatedCard === 'string') updatedCard = JSON.parse(updatedCard);
                         updatedCard = JSON.parse(JSON.stringify(updatedCard)); // Deep copy
 
@@ -850,35 +923,16 @@
                         // Delete the flag
                         await sbClient.from('model_edits').delete().eq('id', flag.id);
 
-                        // UPDATE LOCAL STATE
-                        model.card_data = updatedCard; // Crucial: Updates this.allModels reference
-
                         alert("Model deleted (hidden).");
 
-                        // Refresh views using local state
+                        // Refresh views
                         this.loadTrash();
-                        this.loadEdits();
-                        await this.loadFlags(); // Reload flags from DB to confirm removal
+                        // this.loadEdits(); // Might be expensive
+                        await this.loadFlags();
                     } catch (err) {
                         console.error(err);
                         alert("Error deleting: " + err.message);
                     }
-                },
-
-                loadTrash() {
-                    // Use local allModels which is fully loaded via batching in loadEdits/init
-                    console.log("Loading trash from local models. Total models:", this.allModels.length);
-                    this.trash = this.allModels.map(m => {
-                        let cd = m.card_data;
-                        if (typeof cd === 'string') {
-                            try { cd = JSON.parse(cd); } catch (e) { cd = null; }
-                        }
-                        return { ...m, card_data: cd };
-                    }).filter(m => {
-                        const cd = m.card_data;
-                        return cd && (cd._deleted === true || cd._deleted === "true" || cd._deleted_at);
-                    });
-                    console.log("Trash items found:", this.trash.length);
                 },
 
                 async dismissFlag(flag) {

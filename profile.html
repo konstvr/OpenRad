@@ -264,6 +264,25 @@
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Load More Button -->
+                <div class="mt-4 text-center" x-show="historyHasMore">
+                    <button @click="loadMoreHistory()" :disabled="historyLoading"
+                        class="px-6 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-full text-sm font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-2 mx-auto disabled:opacity-50">
+                        <span x-show="!historyLoading">Load More History</span>
+                        <span x-show="historyLoading" class="flex items-center gap-2">
+                            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none"
+                                viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                </path>
+                            </svg>
+                            Loading...
+                        </span>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -305,6 +324,11 @@
                 stats: { verified: 0, edits: 0 },
                 rank: {},
 
+                historyPage: 0,
+                historyPageSize: 10,
+                historyHasMore: true,
+                historyLoading: false,
+
                 // Password Modal State
                 passwordModalOpen: false,
                 newPassword: '',
@@ -338,6 +362,7 @@
                 },
 
                 async changePassword() {
+                    // ... (keep existing implementation or assume it's there if not replacing)
                     if (this.newPassword.length < 6) {
                         alert("Password must be at least 6 characters.");
                         return;
@@ -369,26 +394,77 @@
                         .limit(1);
                     this.activeTask = active && active.length > 0 ? active[0] : null;
 
-                    // Fetch History (Simplified - Avoid fetching full card_data for list)
-                    // We only need model name, id, verification_date
-                    // But we used card_data.Model.Name in HTML. 
-                    // To optimize, we still fetch card_data but we rely on the fact that history is usually small per user. 
-                    // Alternatively, we could create a view/RPC, but per-user history is usually < 1000 items. 
-                    // Let's at least order it and limit to recent 100 initially if needed, 
-                    // or just select specific fields if we had a flat table. Since it's JSON, we have to fetch it.
-                    // But we can limit the columns.
-                    const { data: hist } = await sbClient
-                        .from('models')
-                        .select('id, card_data, verification_date, verified_by, is_verified')
-                        .eq('verified_by', this.user.id)
-                        .eq('is_verified', true)
-                        .order('verification_date', { ascending: false });
+                    // Fetch History - Initial Load (Page 0)
+                    this.historyPage = 0;
+                    this.history = [];
+                    this.historyHasMore = true;
+                    await this.loadMoreHistory();
 
-                    this.history = hist || [];
-                    this.stats.verified = this.history.length;
-
+                    // Stats: Edits count
                     const { count } = await sbClient.from('model_edits').select('*', { count: 'exact', head: true }).eq('user_id', this.user.id);
                     this.stats.edits = count || 0;
+
+                    // Stats: Total Verified (Separate count query since we don't load all rows now)
+                    const { count: verifiedCount } = await sbClient
+                        .from('models')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('verified_by', this.user.id)
+                        .eq('is_verified', true);
+                    this.stats.verified = verifiedCount || 0;
+                },
+
+                async loadMoreHistory() {
+                    if (this.historyLoading) return;
+                    this.historyLoading = true;
+
+                    try {
+                        const from = this.historyPage * this.historyPageSize;
+                        const to = from + this.historyPageSize - 1;
+
+                        // Optimized Query: Select specific fields only
+                        // Note: card_data->Model->Name requires specific syntax or just fetching card_data
+                        // Supabase JS doesn't support arrow selector in .select() easily for return values without alias or view/RPC usually.
+                        // However, we can fetch `card_data` but we know it's a JSONB column. 
+                        // To be safe and compatible, we fetch card_data but we rely on PostgREST to be efficient? No, it sends full JSON.
+                        // OPTIMIZATION: We CAN'T easily select partial JSON with standard JS client without SQL function 
+                        // UNLESS we accept fetching full card_data for these 10 items. 
+                        // 10 items of full JSON is much better than ALL items.
+
+                        const { data, error } = await sbClient
+                            .from('models')
+                            // .select('id, verification_date, is_verified, verified_by, card_data->Model->Name') // Not standard JS syntax
+                            .select('id, card_data, verification_date, verified_by, is_verified')
+                            .eq('verified_by', this.user.id)
+                            .eq('is_verified', true)
+                            .order('verification_date', { ascending: false })
+                            .range(from, to);
+
+                        if (error) throw error;
+
+                        if (data && data.length > 0) {
+                            const parsedData = data.map(m => {
+                                let cd = m.card_data;
+                                if (typeof cd === 'string') {
+                                    try { cd = JSON.parse(cd); } catch (e) { console.error("Parse error", e); cd = {}; }
+                                }
+                                return { ...m, card_data: cd };
+                            });
+
+                            this.history = [...this.history, ...parsedData];
+                            this.historyPage++;
+                            if (data.length < this.historyPageSize) {
+                                this.historyHasMore = false;
+                            }
+                        } else {
+                            this.historyHasMore = false;
+                        }
+
+                    } catch (err) {
+                        console.error("Error loading history:", err);
+                        alert("Error loading history: " + err.message);
+                    } finally {
+                        this.historyLoading = false;
+                    }
                 },
 
                 updateRank() {
