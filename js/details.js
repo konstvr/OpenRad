@@ -466,6 +466,12 @@ document.addEventListener('alpine:init', () => {
         async saveChanges(shouldVerify = true) {
             if (!this.user) return;
 
+            // [NEW] Prevent verification if flagged
+            if (this.isFlagged && shouldVerify) {
+                alert("Model is flagged. Changes will be saved, but verification is disabled until the flag is resolved.");
+                shouldVerify = false;
+            }
+
             // [NEW] Merge Modalities and Specialties back into Content
             // Preserve any existing codes that are NOT in our managed lists (to be safe)
             const originalContent = this.draft.Model.Indexing?.Content || [];
