@@ -58,9 +58,7 @@ document.addEventListener('alpine:init', () => {
             const rt = urlParams.get('rt');
 
             if (at) {
-                console.log(`[Auth] Detected token handoff. Token length: ${at.length}`);
-                console.log("[Auth] Storage mode:", typeof window.sessionStorage);
-                console.log("[Auth] Starting setSession...");
+                console.log("[Auth] Detected token handoff. Setting session directly...");
 
                 try {
                     const { data, error } = await sbClient.auth.setSession({
@@ -68,11 +66,8 @@ document.addEventListener('alpine:init', () => {
                         refresh_token: rt || ''
                     });
 
-                    console.log("[Auth] setSession returned.");
-                    if (error) {
-                        console.error("[Auth] setSession Error:", error);
-                    } else if (data && data.session) {
-                        console.log("[Auth] setSession Success. User ID:", data.session.user.id);
+                    if (!error && data?.session) {
+                        console.log("[Auth] Session restored via handoff:", data.session.user.id);
                         this.session = data.session;
                         this.user = data.session.user;
 
@@ -80,7 +75,7 @@ document.addEventListener('alpine:init', () => {
                         const newUrl = window.location.pathname + "?id=" + urlParams.get('id'); // Preserve ID
                         window.history.replaceState({}, document.title, newUrl);
                     } else {
-                        console.warn("[Auth] setSession succeeded but no session data returned.", data);
+                        console.warn("[Auth] Token handoff failed:", error);
                     }
                 } catch (e) {
                     console.error("[Auth] setSession Exception:", e);
