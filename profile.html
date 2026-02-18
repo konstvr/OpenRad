@@ -229,6 +229,69 @@
                 </div>
             </div>
 
+            <!-- Liked Models Section (New) -->
+            <div>
+                <h2 class="text-xl font-bold mb-6 text-slate-900 dark:text-white flex items-center gap-2">
+                    <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z">
+                        </path>
+                    </svg>
+                    My Liked Models
+                </h2>
+
+                <div>
+                    <!-- Loading State -->
+                    <div x-show="loadingLikes" class="text-center py-12">
+                        <svg class="animate-spin h-8 w-8 text-slate-300 mx-auto" xmlns="http://www.w3.org/2000/svg"
+                            fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div x-show="!loadingLikes && likedModels.length === 0"
+                        class="text-center py-12 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
+                        <p class="text-slate-500 dark:text-slate-400">You haven't liked any models yet.</p>
+                        <a href="index.html"
+                            class="inline-block mt-4 text-violet-600 hover:text-violet-700 font-bold text-sm">Browse
+                            Models &rarr;</a>
+                    </div>
+
+                    <!-- Grid -->
+                    <div x-show="!loadingLikes && likedModels.length > 0"
+                        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <template x-for="item in likedModels" :key="item.id">
+                            <a :href="'details.html?id=' + item.id"
+                                class="block bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-violet-500 hover:shadow-lg transition group h-full flex flex-col">
+                                <div class="flex justify-between items-start mb-2 gap-2">
+                                    <h3 class="font-bold text-slate-900 dark:text-white group-hover:text-violet-500 transition line-clamp-2"
+                                        x-text="item.card_data.Model.Name"></h3>
+                                </div>
+
+                                <div
+                                    class="mt-auto pt-4 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-700">
+                                    <span x-text="new Date(item.created_at).toLocaleDateString()"
+                                        class="font-mono"></span>
+                                    <div
+                                        class="flex items-center gap-1 text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-full">
+                                        <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                                            <path
+                                                d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                                        </svg>
+                                        <span x-text="item.likes_count"></span>
+                                    </div>
+                                </div>
+                            </a>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
             <div>
                 <h3 class="text-lg font-bold mb-4">Verified History</h3>
                 <div
@@ -310,6 +373,9 @@
                         class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-bold hover:bg-slate-300 dark:hover:bg-slate-600 transition">Cancel</button>
                 </div>
             </div>
+
+
+
         </div>
 
     </div>
@@ -323,6 +389,10 @@
                 history: [],
                 stats: { verified: 0, edits: 0 },
                 rank: {},
+
+                // Liked Models State
+                likedModels: [],
+                loadingLikes: true,
 
                 historyPage: 0,
                 historyPageSize: 10,
@@ -352,6 +422,7 @@
                     }
 
                     await this.loadProfileData();
+                    this.fetchLiked();
 
                     // --- DEV MODE: UNCOMMENT TO TEST BADGES ---
                     // this.stats.verified = 55; // Test "Senior Contributor"
@@ -411,6 +482,34 @@
                         .eq('verified_by', this.user.id)
                         .eq('is_verified', true);
                     this.stats.verified = verifiedCount || 0;
+                },
+
+                async fetchLiked() {
+                    if (!this.user) return;
+                    this.loadingLikes = true;
+                    try {
+                        const { data } = await sbClient.rpc('get_model_previews', {
+                            p_page: 1,
+                            p_page_size: 6,
+                            p_filters: {},
+                            p_sort: 'date',
+                            p_liked_by_user: this.user.id
+                        });
+
+                        // Parse JSONB if needed (similar to history)
+                        if (data && data.length > 0) {
+                            this.likedModels = data.map(m => ({
+                                ...m,
+                                card_data: m.preview_data // Map RPC 'preview_data' to 'card_data' for template compatibility
+                            }));
+                        } else {
+                            this.likedModels = [];
+                        }
+                    } catch (e) {
+                        console.error('Error fetching likes:', e);
+                    } finally {
+                        this.loadingLikes = false;
+                    }
                 },
 
                 async loadMoreHistory() {

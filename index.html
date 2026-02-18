@@ -238,11 +238,14 @@
                     </aside>
 
                     <div class="flex-1">
-                        <div x-show="!loading" class="flex justify-between items-end mb-4 px-1">
-                            <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">Results</h2>
-                            <span class="text-xs font-bold bg-violet-100 text-violet-700 px-2 py-1 rounded-full"
-                                x-text="'Showing ' + filteredModels.length + ' / ' + totalModels + ' Models'">
-                            </span>
+                        <div x-show="!loading"
+                            class="flex flex-col sm:flex-row justify-between items-end sm:items-center mb-4 px-1 gap-2">
+                            <div class="flex items-center gap-4">
+                                <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">Results</h2>
+                                <span class="text-xs font-bold bg-violet-100 text-violet-700 px-2 py-1 rounded-full"
+                                    x-text="'Showing ' + filteredModels.length + ' / ' + totalModels + ' Models'">
+                                </span>
+                            </div>
                         </div>
 
                         <!-- Skeleton Loader -->
@@ -269,9 +272,25 @@
                             <template x-for="item in visibleModels" :key="item.id">
                                 <div @click="goToDetails(item.id)"
                                     class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-violet-500 cursor-pointer transition relative group h-full flex flex-col hover:shadow-lg">
-                                    <div class="flex justify-between items-start mb-2">
+                                    <div class="flex justify-between items-start mb-2 gap-2">
                                         <h3 class="font-bold text-slate-900 dark:text-white group-hover:text-violet-500 transition line-clamp-2"
                                             x-text="item.card_data.Model.Name"></h3>
+
+                                        <!-- Like Count Badge -->
+                                        <div class="flex flex-col items-center shrink-0">
+                                            <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full"
+                                                :class="$store.auth.userLikes.has(item.id) ? 'text-red-500 bg-red-50 dark:bg-red-900/20' : 'text-slate-400'">
+                                                <svg class="w-3.5 h-3.5"
+                                                    :fill="$store.auth.userLikes.has(item.id) ? 'currentColor' : 'none'"
+                                                    stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z">
+                                                    </path>
+                                                </svg>
+                                                <span class="text-xs font-bold" x-text="item.likes_count || 0"></span>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div class="flex flex-wrap gap-2 mb-3">

@@ -33,15 +33,18 @@ document.addEventListener('alpine:init', () => {
         modalOpen: false,
         email: '',
         password: '',
+        userLikes: new Set(), // [NEW] Track liked model IDs
 
         async init() {
             const { data: { session } } = await sbClient.auth.getSession();
             this.user = session?.user || null;
-            this.updateAdminStatus();
+            await this.updateAdminStatus();
+            await this.fetchUserLikes(); // [NEW]
 
             sbClient.auth.onAuthStateChange(async (_event, session) => {
                 this.user = session?.user || null;
-                this.updateAdminStatus();
+                await this.updateAdminStatus();
+                await this.fetchUserLikes(); // [NEW]
             });
             this.loading = false;
         },
@@ -58,6 +61,53 @@ document.addEventListener('alpine:init', () => {
                 if (roleData && roleData.role === 'admin') {
                     this.isAdmin = true;
                 }
+            }
+        },
+
+        // [NEW] Fetch User Likes
+        async fetchUserLikes() {
+            this.userLikes = new Set();
+            if (this.user) {
+                const { data } = await sbClient
+                    .from('model_likes')
+                    .select('model_id')
+                    .eq('user_id', this.user.id);
+
+                if (data) {
+                    data.forEach(row => this.userLikes.add(row.model_id));
+                }
+            }
+        },
+
+        // [NEW] Toggle Like Action
+        async toggleLike(modelId) {
+            if (!this.user) {
+                this.modalOpen = true; // Use existing login modal
+                return false;
+            }
+
+            const isLiked = this.userLikes.has(modelId);
+
+            // Optimistic Update
+            if (isLiked) this.userLikes.delete(modelId);
+            else this.userLikes.add(modelId);
+
+            try {
+                if (isLiked) {
+                    // Unlike
+                    await sbClient.from('model_likes').delete().eq('user_id', this.user.id).eq('model_id', modelId);
+                } else {
+                    // Like
+                    await sbClient.from('model_likes').insert({ user_id: this.user.id, model_id: modelId });
+                }
+                return true;
+            } catch (err) {
+                console.error("Like error:", err);
+                // Revert
+                if (isLiked) this.userLikes.add(modelId);
+                else this.userLikes.delete(modelId);
+                alert("Action failed. Please try again.");
+                return false;
             }
         },
 
@@ -123,7 +173,9 @@ function dashboardApp() {
         filterAtlas: false,
         selectedSpecialties: [],
         selectedModalities: [],
+        selectedModalities: [],
         selectedUses: [],
+        sortBy: 'likes', // [NEW] Default Sort
 
         // Constants for UI
         codeMap: FULL_MAPPING,
@@ -149,7 +201,7 @@ function dashboardApp() {
 
             // Watch filters to trigger refetch
             ['filterVerified', 'filterDemo', 'filterWeights', 'filterAtlas',
-                'selectedSpecialties', 'selectedModalities', 'selectedUses'].forEach(prop => {
+                'selectedSpecialties', 'selectedModalities', 'selectedUses', 'sortBy'].forEach(prop => {
                     this.$watch(prop, () => this.fetchModels(true));
                 });
         },
@@ -186,11 +238,14 @@ function dashboardApp() {
                     uses: this.selectedUses
                 };
 
+                // [MODIFIED] Use new RPC signature
                 const { data, error } = await sbClient.rpc('get_model_previews', {
                     p_page: this.currentPage,
                     p_page_size: this.pageSize,
                     p_search: this.searchQuery,
-                    p_filters: filters
+                    p_filters: filters,
+                    p_sort: this.sortBy, // [NEW]
+                    p_liked_by_user: null // Not needed for main dashboard
                 });
 
                 if (error) throw error;
@@ -200,6 +255,7 @@ function dashboardApp() {
                     id: row.id,
                     created_at: row.created_at,
                     is_verified: row.is_verified,
+                    likes_count: row.likes_count, // [NEW]
                     card_data: row.preview_data // Use the pre-processed JSON from RPC
                 }));
 
