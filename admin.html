@@ -300,7 +300,7 @@
                                 <div class="flex-1">
                                     <h3 class="font-bold text-lg mb-1 flex items-center gap-2">
                                         <span x-text="flag.modelName"></span>
-                                        <a :href="'details.html?id=' + flag.model_id" target="_blank"
+                                        <a href="#" @click.prevent="openPublicPage(flag.model_id)"
                                             class="text-xs font-normal text-violet-600 hover:underline flex items-center gap-1">
                                             Open <svg class="w-3 h-3" fill="none" stroke="currentColor"
                                                 viewBox="0 0 24 24">
