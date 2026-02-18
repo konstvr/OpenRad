@@ -152,7 +152,7 @@
                                 class="p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-between">
                                 <h2 class="text-xl font-bold" x-text="selectedModel.card_data.Model.Name"></h2>
                                 <div class="flex gap-2 items-center">
-                                    <a :href="'details.html?id=' + selectedModel.id" target="_blank"
+                                    <a href="#" @click.prevent="openPublicPage(selectedModel.id)"
                                         class="text-xs text-violet-600 hover:text-violet-800 font-bold flex items-center gap-1 mr-2">
                                         Open Public Page
                                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -629,8 +629,20 @@
 
                 async init() {
                     if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
-                    const { data: { session } } = await sbClient.auth.getSession();
-                    this.user = session?.user;
+                    // Wait for Global Auth (app.js) to finish
+                    // Prevents AbortError race condition
+                    const authStore = Alpine.store('auth');
+                    if (authStore) {
+                        let safety = 0;
+                        while (authStore.loading && safety < 50) {
+                            await new Promise(r => setTimeout(r, 50));
+                            safety++;
+                        }
+                        this.user = authStore.user;
+                    } else {
+                        const { data } = await sbClient.auth.getSession();
+                        this.user = data?.session?.user;
+                    }
 
                     // Watch tab changes to lazy load or refresh data
                     this.$watch('activeTab', value => {
@@ -853,6 +865,23 @@
 
                     const { data: roles } = await sbClient.from('user_roles').select('id').eq('role', 'admin');
                     if (roles) this.adminIds = roles.map(r => r.id);
+                },
+
+                async openPublicPage(id) {
+                    // Use Cached Session from Store (Synchronous - No Lock Contention)
+                    const session = Alpine.store('auth').session; // Updated to use store
+
+                    let url = `details.html?id=${id}`;
+                    if (session?.access_token) {
+                        // Encode tokens to avoid URL parsing issues
+                        const params = new URLSearchParams();
+                        params.append('at', session.access_token);
+                        if (session.refresh_token) params.append('rt', session.refresh_token);
+
+                        // Append to base URL
+                        url += `&${params.toString()}`;
+                    }
+                    window.open(url, '_blank');
                 },
 
                 getUserName(userId) {

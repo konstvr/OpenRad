@@ -4,7 +4,20 @@
 const SUPABASE_URL = 'https://lnhwazoamudessdhhvsj.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uzQs9fk-6ZTeu4RSJ3wHgw_1KMskJ9-';
 
-const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// [NEW] Storage Isolation: Detect Handoff Mode
+// If we receive a token via URL, use SessionStorage to avoid LocalStorage lock contention
+const _urlParams = new URLSearchParams(window.location.search);
+const _isHandoff = _urlParams.has('at');
+
+const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, _isHandoff ? {
+    auth: {
+        storage: window.sessionStorage, // Isolate storage backend
+        storageKey: 'sb-handoff-isolated', // Isolate lock names (Critical for concurrency)
+        persistSession: true,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+    }
+} : {});
 
 const MODALITY_CODES = ["CT", "FL", "MR", "NM", "PET", "US", "XR", "DXA"];
 const SUBSPECIALTY_CODES = [
@@ -27,6 +40,7 @@ const FULL_MAPPING = {
 // --- SHARED STORE ---
 document.addEventListener('alpine:init', () => {
     Alpine.store('auth', {
+        session: null, // [NEW] Store full session for token access
         user: null,
         isAdmin: false,
         loading: true,
@@ -36,17 +50,104 @@ document.addEventListener('alpine:init', () => {
         userLikes: new Set(), // [NEW] Track liked model IDs
 
         async init() {
-            const { data: { session } } = await sbClient.auth.getSession();
-            this.user = session?.user || null;
-            await this.updateAdminStatus();
-            await this.fetchUserLikes(); // [NEW]
+            console.log("[Auth] Store initializing...");
+
+            // [NEW] Token Handoff: Check for tokens passed via URL (from admin.html)
+            const urlParams = new URLSearchParams(window.location.search);
+            const at = urlParams.get('at');
+            const rt = urlParams.get('rt');
+
+            if (at) {
+                console.log(`[Auth] Detected token handoff. Token length: ${at.length}`);
+                console.log("[Auth] Storage mode:", typeof window.sessionStorage);
+                console.log("[Auth] Starting setSession...");
+
+                try {
+                    const { data, error } = await sbClient.auth.setSession({
+                        access_token: at,
+                        refresh_token: rt || ''
+                    });
+
+                    console.log("[Auth] setSession returned.");
+                    if (error) {
+                        console.error("[Auth] setSession Error:", error);
+                    } else if (data && data.session) {
+                        console.log("[Auth] setSession Success. User ID:", data.session.user.id);
+                        this.session = data.session;
+                        this.user = data.session.user;
+
+                        // Cleanup URL (Security)
+                        const newUrl = window.location.pathname + "?id=" + urlParams.get('id'); // Preserve ID
+                        window.history.replaceState({}, document.title, newUrl);
+                    } else {
+                        console.warn("[Auth] setSession succeeded but no session data returned.", data);
+                    }
+                } catch (e) {
+                    console.error("[Auth] setSession Exception:", e);
+                }
+            }
+
+            // If we didn't recover session from URL, try standard checks
+            if (!this.user) {
+                // Robust Auth Check: Handle Lock Contention (AbortError)
+                let attempts = 0;
+                const maxAttempts = 5;
+
+                while (attempts < maxAttempts) {
+                    try {
+                        console.log(`[Auth] Attempt ${attempts + 1}: calling getSession()`);
+                        const { data, error } = await sbClient.auth.getSession();
+                        if (error) throw error;
+                        this.session = data?.session || null;
+                        this.user = data?.session?.user || null;
+                        console.log("[Auth] Session found:", this.user ? this.user.id : "No Session");
+                        break;
+                    } catch (error) {
+                        console.warn(`[Auth] Attempt ${attempts + 1} failed:`, error);
+
+                        if (error.name === 'AbortError' || error.message?.includes('AbortError')) {
+                            // Jittered Backoff: 300ms, 600ms, 1200ms... + random jitter
+                            const delay = (300 * Math.pow(2, attempts)) + (Math.random() * 200);
+                            console.log(`[Auth] Waiting ${Math.round(delay)}ms before retry...`);
+
+                            try {
+                                const { data: userData, error: userError } = await sbClient.auth.getUser();
+                                if (!userError && userData?.user) {
+                                    this.user = userData.user;
+                                    console.log("[Auth] Fallback recovered user:", this.user.id);
+                                    break;
+                                }
+                            } catch (innerErr) { /* ignore */ }
+
+                            attempts++;
+                            await new Promise(r => setTimeout(r, delay));
+                        } else {
+                            console.error("[Auth] Fatal error (not lock related):", error);
+                            this.user = null;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            try {
+                await this.updateAdminStatus();
+                if (this.user) {
+                    console.log("[Auth] Fetching user likes...");
+                    await this.fetchUserLikes();
+                }
+            } catch (err) {
+                console.error("[Auth] Post-login setup failed (Non-fatal):", err);
+            }
 
             sbClient.auth.onAuthStateChange(async (_event, session) => {
+                this.session = session;
                 this.user = session?.user || null;
                 await this.updateAdminStatus();
                 await this.fetchUserLikes(); // [NEW]
             });
             this.loading = false;
+            console.log("[Auth] Init complete. Loading = false");
         },
 
         async updateAdminStatus() {
@@ -190,7 +291,19 @@ function dashboardApp() {
 
         async initApp() {
             if (this.darkMode) document.documentElement.classList.add('dark');
-            await sbClient.auth.getSession();
+
+            // Wait for Auth Store to complete initialization
+            // This ensures we have the user ID for likes and correct admin status before fetching
+            const authStore = Alpine.store('auth');
+            if (authStore) {
+                // Wait up to 2 seconds for auth
+                let safety = 0;
+                while (authStore.loading && safety < 40) {
+                    await new Promise(r => setTimeout(r, 50));
+                    safety++;
+                }
+            }
+
 
             // Initial Fetch
             await this.fetchModels(true);
@@ -204,6 +317,16 @@ function dashboardApp() {
                 'selectedSpecialties', 'selectedModalities', 'selectedUses', 'sortBy'].forEach(prop => {
                     this.$watch(prop, () => this.fetchModels(true));
                 });
+
+            // Watch auth user change to refetch (e.g. after login/logout)
+            // This fixes the issue where the list doesn't update if auth happens LATE (after timeout)
+            // or if the user logs in via modal.
+            Alpine.effect(() => {
+                const u = Alpine.store('auth').user; // Dependency
+                // debounce or simple check to avoid double-fetch on init
+                // We rely on the initial fetch above for the first load. 
+                // This effect will run on changes. 
+            });
         },
 
         debouncedFetch: Alpine.debounce(function () {

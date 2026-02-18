@@ -20,9 +20,21 @@ document.addEventListener('alpine:init', () => {
             // Theme check
             if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
 
-            // Auth check
-            const { data: { session } } = await sbClient.auth.getSession();
-            this.user = session?.user;
+            // Wait for Global Auth (app.js) to finish
+            // This prevents "AbortError" caused by double-firing getSession()
+            const authStore = Alpine.store('auth');
+            if (authStore) {
+                let safety = 0;
+                while (authStore.loading && safety < 100) { // Max 5.0s wait (matches app.js retry limit)
+                    await new Promise(r => setTimeout(r, 50));
+                    safety++;
+                }
+                this.user = authStore.user;
+            } else {
+                // Fallback if store missing (shouldn't happen)
+                const { data } = await sbClient.auth.getSession();
+                this.user = data?.session?.user || null;
+            }
 
             // Check Admin Role
             if (this.user) {
