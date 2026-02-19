@@ -98,7 +98,15 @@ document.addEventListener('alpine:init', () => {
                     try {
                         console.log(`[Auth] Attempt ${attempts + 1}: calling getSession()`);
                         const start = Date.now();
-                        const { data, error } = await sbClient.auth.getSession();
+
+                        // [OPTIMIZATION] Race getSession against a 2s timeout to avoid waiting 10s for lock
+                        // We attach a no-op catch to sessionPromise to prevent "Uncaught (in promise)" logs when it eventually fails later
+                        const sessionPromise = sbClient.auth.getSession().catch(err => ({ error: err }));
+                        const timeoutPromise = new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error("AuthLockTimeout")), 2000)
+                        );
+
+                        const { data, error } = await Promise.race([sessionPromise, timeoutPromise]);
                         console.log(`[Auth] getSession took ${Date.now() - start}ms`);
 
                         if (error) throw error;
@@ -120,7 +128,7 @@ document.addEventListener('alpine:init', () => {
                         });
 
                         const errString = String(error);
-                        if (errString.includes('AbortError') || errString.includes('LockManager') || errString.includes('timeout') || errString.includes('lock')) {
+                        if (errString.includes('AbortError') || errString.includes('LockManager') || errString.includes('timeout') || errString.includes('lock') || errString.includes('AuthLockTimeout')) {
                             // [MODIFIED] Ultra-Robust Fallback: Manual LocalStorage Read
                             console.log(`[Auth] Lock contention detected. Attempting manual LocalStorage recovery...`);
 
