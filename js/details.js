@@ -552,11 +552,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         async saveChanges(shouldVerify = true) {
-            console.log("[Details] saveChanges triggered. Verify:", shouldVerify);
-            if (!this.user) {
-                console.warn("[Details] saveChanges: No user logged in.");
-                return;
-            }
+            if (!this.user) return;
 
             try {
 
