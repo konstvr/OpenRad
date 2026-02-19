@@ -77,9 +77,21 @@
                     </button>
                 </div>
 
-                <button @click="exportDatabase()"
-                    class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition shadow-sm text-sm">
-                    Export DB
+                <button @click="exportDatabase()" :disabled="isExporting"
+                    :class="{'opacity-75 cursor-wait': isExporting}"
+                    class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition shadow-sm text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="!isExporting">Export DB</span>
+                    <span x-show="isExporting" class="flex items-center gap-2">
+                        <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none"
+                            viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
+                        Exporting...
+                    </span>
                 </button>
             </div>
         </div>
@@ -573,7 +585,7 @@
     <script>
         function adminApp() {
             return {
-                user: null, isAdmin: false, activeTab: 'edits',
+                user: null, isAdmin: false, activeTab: 'edits', isExporting: false,
                 // Data
                 allModels: [], verifiedModels: [], editCounts: {}, selectedModel: null, currentEdits: [],
                 flaggedModels: [], trash: [], submissions: [], selectedSubmission: null, // Submissions
@@ -1144,29 +1156,118 @@
                 },
 
                 async exportDatabase() {
-                    const exportData = [];
-                    for (const model of this.allModels) {
-                        const exportCard = JSON.parse(JSON.stringify(model.card_data));
-                        const modelEdits = this.allEdits.filter(e => e.model_id === model.id && e.field_path !== '__FLAG__');
-                        const editsDict = {};
+                    this.isExporting = true;
+                    try {
+                        // Helper to fetch all records with pagination
+                        const fetchAll = async (table, select, chunkSize = 1000) => {
+                            let allData = [];
+                            let from = 0;
+                            let more = true;
 
-                        if (modelEdits.length > 0) {
-                            modelEdits.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-                            modelEdits.forEach(edit => {
-                                editsDict[edit.field_path] = edit.severity;
-                            });
+                            while (more) {
+                                const to = from + chunkSize - 1;
+                                // Update UI with progress (optional, but nice)
+                                const { data, error } = await sbClient
+                                    .from(table)
+                                    .select(select)
+                                    .range(from, to);
+
+                                if (error) throw error;
+
+                                if (data.length > 0) {
+                                    allData = [...allData, ...data];
+                                    from += chunkSize;
+                                    // If we got less than requested, we are done
+                                    if (data.length < chunkSize) more = false;
+                                } else {
+                                    more = false;
+                                }
+                                console.log(`Fetched ${allData.length} from ${table}...`);
+                            }
+                            return allData;
+                        };
+
+                        // 1. Fetch all models (optimized columns)
+                        const models = await fetchAll('models', 'id, card_data');
+
+                        // 2. Fetch all edits (optimized columns)
+                        // Note: For edits, we need to filter out flags carefully.
+                        // Since .neq() applies to the whole range, we can just use it in the query chain.
+                        // However, fetchAll helper needs to support query modifiers.
+                        // Let's implement a custom loop or make fetchAll more flexible.
+                        // Custom loop for edits to include the .neq filter:
+                        let edits = [];
+                        let from = 0;
+                        let more = true;
+                        const chunkSize = 1000;
+                        while (more) {
+                            const { data, error } = await sbClient
+                                .from('model_edits')
+                                .select('model_id, field_path, severity, created_at')
+                                .neq('field_path', '__FLAG__')
+                                .range(from, from + chunkSize - 1);
+
+                            if (error) throw error;
+                            if (data.length > 0) {
+                                edits = [...edits, ...data];
+                                from += chunkSize;
+                                if (data.length < chunkSize) more = false;
+                            } else {
+                                more = false;
+                            }
+                            console.log(`Fetched ${edits.length} edits...`);
                         }
-                        exportCard['edits'] = editsDict;
-                        exportData.push(exportCard);
-                    }
 
-                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 4));
-                    const a = document.createElement('a');
-                    a.href = dataStr;
-                    a.download = `openrad_database_export_${new Date().toISOString().split('T')[0]}.json`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
+
+                        console.log(`Exporting ${models.length} models and ${edits.length} edit records...`);
+
+                        // 3. Process and Join
+                        const exportData = models.map(m => {
+                            let card = m.card_data;
+                            if (typeof card === 'string') {
+                                try { card = JSON.parse(card); } catch (e) { card = {}; }
+                            }
+                            // Deep copy to avoid mutating any state (though 'models' is local here)
+                            const exportCard = JSON.parse(JSON.stringify(card));
+
+                            // Find edits for this model
+                            const modelEdits = edits.filter(e => e.model_id === m.id);
+                            const editsDict = {};
+
+                            if (modelEdits.length > 0) {
+                                // Sort by date to apply edits in order (though we only take the severity here)
+                                // In the original code, we just took the last value? No, we mapped all field_paths.
+                                // actually the original code: editsDict[edit.field_path] = edit.severity;
+                                // If multiple edits exist for same field, last one writes over.
+                                // So sorting matters.
+                                modelEdits.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                                modelEdits.forEach(edit => {
+                                    editsDict[edit.field_path] = edit.severity;
+                                });
+                            }
+
+                            // Attach the edits summary to the exported card
+                            exportCard['edits'] = editsDict;
+                            return exportCard;
+                        });
+
+                        // 4. Trigger Download
+                        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 4));
+                        const a = document.createElement('a');
+                        a.href = dataStr;
+                        a.download = `openrad_database_export_${new Date().toISOString().split('T')[0]}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+
+                        console.log("Export complete.");
+
+                    } catch (err) {
+                        console.error("Export failed:", err);
+                        alert("Export failed: " + err.message);
+                    } finally {
+                        this.isExporting = false;
+                    }
                 },
 
                 setNested(obj, path, value) {
