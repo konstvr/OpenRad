@@ -19,6 +19,9 @@ const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, _isHandoff ? 
     }
 } : {});
 
+// Global Fallback Client (initially same as main)
+window.sbRpcClient = sbClient;
+
 const MODALITY_CODES = ["CT", "FL", "MR", "NM", "PET", "US", "XR", "DXA"];
 const SUBSPECIALTY_CODES = [
     "AB", "BR", "CA", "CH", "ER", "GI", "GU", "HN", "IR", "MI",
@@ -47,7 +50,10 @@ document.addEventListener('alpine:init', () => {
         modalOpen: false,
         email: '',
         password: '',
+        password: '',
         userLikes: new Set(), // [NEW] Track liked model IDs
+        useRawFetch: false,   // [NEW] Toggle for raw fetch fallback
+        recoveredToken: null,
 
         async init() {
             console.log("[Auth] Store initializing...");
@@ -86,36 +92,102 @@ document.addEventListener('alpine:init', () => {
             if (!this.user) {
                 // Robust Auth Check: Handle Lock Contention (AbortError)
                 let attempts = 0;
-                const maxAttempts = 5;
+                const maxAttempts = 2;
 
                 while (attempts < maxAttempts) {
                     try {
                         console.log(`[Auth] Attempt ${attempts + 1}: calling getSession()`);
+                        const start = Date.now();
                         const { data, error } = await sbClient.auth.getSession();
+                        console.log(`[Auth] getSession took ${Date.now() - start}ms`);
+
                         if (error) throw error;
                         this.session = data?.session || null;
                         this.user = data?.session?.user || null;
                         console.log("[Auth] Session found:", this.user ? this.user.id : "No Session");
+                        if (this.session) {
+                            // Sync RPC client
+                            window.sbRpcClient = sbClient;
+                        }
                         break;
                     } catch (error) {
                         console.warn(`[Auth] Attempt ${attempts + 1} failed:`, error);
+                        console.log("DEBUG ERROR:", {
+                            isError: error instanceof Error,
+                            name: error?.name,
+                            message: error?.message,
+                            stringified: String(error)
+                        });
 
-                        if (error.name === 'AbortError' || error.message?.includes('AbortError')) {
-                            // Jittered Backoff: 300ms, 600ms, 1200ms... + random jitter
-                            const delay = (300 * Math.pow(2, attempts)) + (Math.random() * 200);
-                            console.log(`[Auth] Waiting ${Math.round(delay)}ms before retry...`);
+                        const errString = String(error);
+                        if (errString.includes('AbortError') || errString.includes('LockManager') || errString.includes('timeout') || errString.includes('lock')) {
+                            // [MODIFIED] Ultra-Robust Fallback: Manual LocalStorage Read
+                            console.log(`[Auth] Lock contention detected. Attempting manual LocalStorage recovery...`);
 
                             try {
-                                const { data: userData, error: userError } = await sbClient.auth.getUser();
-                                if (!userError && userData?.user) {
-                                    this.user = userData.user;
-                                    console.log("[Auth] Fallback recovered user:", this.user.id);
-                                    break;
+                                // 1. Try to read the token directly from LocalStorage
+                                // The key is 'sb-<project_ref>-auth-token'
+                                const projectRef = 'lnhwazoamudessdhhvsj';
+                                const key = `sb-${projectRef}-auth-token`;
+                                const raw = localStorage.getItem(key);
+
+                                if (raw) {
+                                    const session = JSON.parse(raw);
+                                    if (session && session.access_token && session.user) {
+                                        console.log("[Auth] Manually recovered session from LocalStorage!", session.user.id);
+                                        this.session = session;
+                                        this.user = session.user;
+
+                                        // 2. Headless Safe Fetch (Bypasses Lock by using raw HTTP)
+                                        console.log("[Auth] Switching to Raw Fetch mode with recovered token...");
+
+                                        this.useRawFetch = true; // Flag to use raw fetch
+                                        this.recoveredToken = session.access_token;
+
+                                        // Helper for Raw Fetch
+                                        window.safeFetch = async (endpoint, options = {}) => {
+                                            const url = `${SUPABASE_URL}${endpoint}`;
+                                            const headers = {
+                                                'apikey': SUPABASE_KEY,
+                                                'Authorization': `Bearer ${session.access_token}`,
+                                                'Content-Type': 'application/json',
+                                                ...options.headers
+                                            };
+
+                                            console.log(`[SafeFetch] ${options.method || 'GET'} ${url}`);
+                                            const res = await fetch(url, { ...options, headers });
+
+                                            // Handle Void responses
+                                            if (res.status === 204) return { data: null, error: null };
+
+                                            // Handle JSON
+                                            const isJson = res.headers.get('content-type')?.includes('application/json');
+                                            if (isJson) {
+                                                const json = await res.json();
+                                                if (!res.ok) return { data: null, error: json };
+                                                return { data: json, error: null };
+                                            }
+
+                                            if (!res.ok) return { data: null, error: { message: res.statusText } };
+                                            return { data: null, error: null };
+                                        };
+
+                                        // Set loading false explicitly here if we broke the loop early? 
+                                        // No, init() finishes and sets loading = false.
+
+                                        break; // Success!
+
+                                        break; // Success!
+                                    }
+                                } else {
+                                    console.log("[Auth] No session found in LocalStorage manually.");
                                 }
-                            } catch (innerErr) { /* ignore */ }
+                            } catch (manualErr) {
+                                console.error("[Auth] Manual recovery failed:", manualErr);
+                            }
 
                             attempts++;
-                            await new Promise(r => setTimeout(r, delay));
+                            if (attempts < maxAttempts) await new Promise(r => setTimeout(r, 500));
                         } else {
                             console.error("[Auth] Fatal error (not lock related):", error);
                             this.user = null;
@@ -135,24 +207,51 @@ document.addEventListener('alpine:init', () => {
                 console.error("[Auth] Post-login setup failed (Non-fatal):", err);
             }
 
-            sbClient.auth.onAuthStateChange(async (_event, session) => {
+            sbClient.auth.onAuthStateChange(async (event, session) => {
+                console.log(`[Auth] onAuthStateChange event: ${event}`, session?.user?.id);
                 this.session = session;
                 this.user = session?.user || null;
+                if (session) window.sbRpcClient = sbClient; // Re-sync if official client recovers
+
+                if (event === 'SIGNED_OUT') {
+                    console.log("[Auth] User explicitly signed out or session expired.");
+                }
                 await this.updateAdminStatus();
-                await this.fetchUserLikes(); // [NEW]
+                if (this.user) await this.fetchUserLikes();
             });
             this.loading = false;
-            console.log("[Auth] Init complete. Loading = false");
+            console.log("[Auth] Init complete. Loading = false. User state:", this.user ? "Logged In" : "Logged Out");
         },
 
         async updateAdminStatus() {
             this.isAdmin = false;
+            // Admin checks might fail if RLS requires proper auth, 
+            // but the secondary client has the token so it should work.
+
             if (this.user) {
-                const { data: roleData } = await sbClient
-                    .from('user_roles')
-                    .select('role')
-                    .eq('id', this.user.id)
-                    .maybeSingle();
+                let data, error;
+                if (window.safeFetch && this.useRawFetch) {
+                    // Manual select: /rest/v1/user_roles?select=role&id=eq.USER_ID&limit=1
+                    const q = `?select=role&id=eq.${this.user.id}&limit=1`;
+                    // Header Prefer: return=representation used by default? Supabase rest returns array by default.
+                    const res = await window.safeFetch(`/rest/v1/user_roles${q}`, {
+                        method: 'GET',
+                        headers: { 'Prefer': 'return=representation' }
+                    });
+                    // res.data is array
+                    data = (res.data && res.data.length > 0) ? res.data[0] : null;
+                    error = res.error;
+                } else {
+                    const res = await sbClient
+                        .from('user_roles')
+                        .select('role')
+                        .eq('id', this.user.id)
+                        .maybeSingle();
+                    data = res.data;
+                    error = res.error;
+                }
+
+                const roleData = data;
 
                 if (roleData && roleData.role === 'admin') {
                     this.isAdmin = true;
@@ -164,7 +263,8 @@ document.addEventListener('alpine:init', () => {
         async fetchUserLikes() {
             this.userLikes = new Set();
             if (this.user) {
-                const { data } = await sbClient
+                const clientToUse = window.sbRpcClient || sbClient;
+                const { data } = await clientToUse
                     .from('model_likes')
                     .select('model_id')
                     .eq('user_id', this.user.id);
@@ -189,12 +289,27 @@ document.addEventListener('alpine:init', () => {
             else this.userLikes.add(modelId);
 
             try {
-                if (isLiked) {
-                    // Unlike
-                    await sbClient.from('model_likes').delete().eq('user_id', this.user.id).eq('model_id', modelId);
+                if (window.safeFetch && this.useRawFetch) {
+                    if (isLiked) {
+                        // DELETE /rest/v1/model_likes?user_id=eq.ID&model_id=eq.ID
+                        const q = `?user_id=eq.${this.user.id}&model_id=eq.${modelId}`;
+                        await window.safeFetch(`/rest/v1/model_likes${q}`, { method: 'DELETE' });
+                    } else {
+                        // POST /rest/v1/model_likes
+                        await window.safeFetch(`/rest/v1/model_likes`, {
+                            method: 'POST',
+                            body: JSON.stringify({ user_id: this.user.id, model_id: modelId }),
+                            headers: { 'Prefer': 'return=minimal' }
+                        });
+                    }
                 } else {
-                    // Like
-                    await sbClient.from('model_likes').insert({ user_id: this.user.id, model_id: modelId });
+                    if (isLiked) {
+                        // Unlike
+                        await sbClient.from('model_likes').delete().eq('user_id', this.user.id).eq('model_id', modelId);
+                    } else {
+                        // Like
+                        await sbClient.from('model_likes').insert({ user_id: this.user.id, model_id: modelId });
+                    }
                 }
                 return true;
             } catch (err) {
@@ -287,19 +402,6 @@ function dashboardApp() {
         async initApp() {
             if (this.darkMode) document.documentElement.classList.add('dark');
 
-            // Wait for Auth Store to complete initialization
-            // This ensures we have the user ID for likes and correct admin status before fetching
-            const authStore = Alpine.store('auth');
-            if (authStore) {
-                // Wait up to 2 seconds for auth
-                let safety = 0;
-                while (authStore.loading && safety < 40) {
-                    await new Promise(r => setTimeout(r, 50));
-                    safety++;
-                }
-            }
-
-
             // Initial Fetch
             await this.fetchModels(true);
             this.fetchStats(); // Fire and forget
@@ -329,6 +431,13 @@ function dashboardApp() {
         }, 500),
 
         async fetchModels(reset = false) {
+            // [MODIFIED] Wait for Auth to Stabilize
+            // This is critical because init() might be recovering from lock timeout
+            while (Alpine.store('auth').loading) {
+                console.log("[FetchModels] Waiting for auth to stabilize...");
+                await new Promise(r => setTimeout(r, 200));
+            }
+
             if (this.loading && !reset) return; // Prevent parallel fetches
 
             this.loading = true;
@@ -357,14 +466,37 @@ function dashboardApp() {
                 };
 
                 // [MODIFIED] Use new RPC signature
-                const { data, error } = await sbClient.rpc('get_model_previews', {
-                    p_page: this.currentPage,
-                    p_page_size: this.pageSize,
-                    p_search: this.searchQuery,
-                    p_filters: filters,
-                    p_sort: this.sortBy, // [NEW]
-                    p_liked_by_user: null // Not needed for main dashboard
-                });
+                // Use safeFetch if main client is locked out
+                let data, error;
+
+                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                    console.log("[FetchModels] Using RAW FETCH (Fallback)");
+                    const res = await window.safeFetch('/rest/v1/rpc/get_model_previews', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            p_page: this.currentPage,
+                            p_page_size: this.pageSize,
+                            p_search: this.searchQuery,
+                            p_filters: filters,
+                            p_sort: this.sortBy,
+                            p_liked_by_user: null
+                        })
+                    });
+                    data = res.data;
+                    error = res.error;
+                } else {
+                    console.log("[FetchModels] Using MAIN client");
+                    const res = await sbClient.rpc('get_model_previews', {
+                        p_page: this.currentPage,
+                        p_page_size: this.pageSize,
+                        p_search: this.searchQuery,
+                        p_filters: filters,
+                        p_sort: this.sortBy,
+                        p_liked_by_user: null
+                    });
+                    data = res.data;
+                    error = res.error;
+                }
 
                 if (error) throw error;
 
@@ -396,14 +528,35 @@ function dashboardApp() {
 
             } catch (err) {
                 console.error("Error fetching models:", err);
+                console.error("Fetch Error Details:", {
+                    name: err.name,
+                    message: err.message,
+                    details: err.details,
+                    hint: err.hint
+                });
             } finally {
                 this.loading = false;
             }
         },
 
         async fetchStats() {
+            // Wait for auth to ensure we use correct client (main or fallback)
+            while (Alpine.store('auth').loading) {
+                await new Promise(r => setTimeout(r, 200));
+            }
+
             try {
-                const { data, error } = await sbClient.rpc('get_dashboard_stats');
+                let data, error;
+                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                    const res = await window.safeFetch('/rest/v1/rpc/get_dashboard_stats', { method: 'POST' });
+                    data = res.data;
+                    error = res.error;
+                } else {
+                    const res = await sbClient.rpc('get_dashboard_stats');
+                    data = res.data;
+                    error = res.error;
+                }
+
                 if (error) throw error;
                 this.stats = data;
 

@@ -25,10 +25,12 @@ document.addEventListener('alpine:init', () => {
             const authStore = Alpine.store('auth');
             if (authStore) {
                 let safety = 0;
-                while (authStore.loading && safety < 100) { // Max 5.0s wait (matches app.js retry limit)
+                while (authStore.loading && safety < 400) { // Max 20.0s wait (covers 10s lock timeout + overhead)
+                    if (safety % 20 === 0) console.log("[Details] Waiting for auth...");
                     await new Promise(r => setTimeout(r, 50));
                     safety++;
                 }
+                if (authStore.loading) console.warn("[Details] Auth wait timed out (20s). Proceeding anyway...");
                 this.user = authStore.user;
             } else {
                 // Fallback if store missing (shouldn't happen)
@@ -38,11 +40,18 @@ document.addEventListener('alpine:init', () => {
 
             // Check Admin Role
             if (this.user) {
-                const { data: roleData } = await sbClient
-                    .from('user_roles')
-                    .select('role')
-                    .eq('id', this.user.id)
-                    .maybeSingle();
+                let roleData;
+                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                    const res = await window.safeFetch(`/rest/v1/user_roles?select=role&id=eq.${this.user.id}&limit=1`);
+                    roleData = (res.data && res.data.length > 0) ? res.data[0] : null;
+                } else {
+                    const { data } = await sbClient
+                        .from('user_roles')
+                        .select('role')
+                        .eq('id', this.user.id)
+                        .maybeSingle();
+                    roleData = data;
+                }
 
                 if (roleData && roleData.role === 'admin') {
                     this.isAdmin = true;
@@ -57,7 +66,25 @@ document.addEventListener('alpine:init', () => {
             }
 
             // Fetch Model
-            const { data, error } = await sbClient.from('models').select('*').eq('id', id).single();
+            // Fetch Model
+            let data, error;
+            if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                console.log("[Details] Using SafeFetch Fallback for Model Data");
+                const res = await window.safeFetch(`/rest/v1/models?id=eq.${id}&select=*`, {
+                    headers: { 'Prefer': 'return=representation' }
+                });
+                if (res.error) {
+                    error = res.error;
+                } else if (!res.data || res.data.length === 0) {
+                    error = { message: "Model not found (empty result)" };
+                } else {
+                    data = res.data[0];
+                }
+            } else {
+                const res = await sbClient.from('models').select('*').eq('id', id).single();
+                data = res.data;
+                error = res.error;
+            }
             if (error || !data) {
                 alert("Model not found");
                 window.location.href = 'index.html';
@@ -94,12 +121,20 @@ document.addEventListener('alpine:init', () => {
             // 2. (Optional) If you want to allow the user to Unflag their OWN report, 
             // you still need to find their specific edit ID.
             if (this.user && this.isFlagged) {
-                const { data: flags } = await sbClient.from('model_edits')
-                    .select('id')
-                    .eq('model_id', this.model.id)
-                    .eq('user_id', this.user.id)
-                    .eq('field_path', '__FLAG__')
-                    .maybeSingle();
+                let flags;
+                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                    const q = `?model_id=eq.${this.model.id}&user_id=eq.${this.user.id}&field_path=eq.__FLAG__&limit=1`;
+                    const res = await window.safeFetch(`/rest/v1/model_edits${q}`);
+                    flags = (res.data && res.data.length > 0) ? res.data[0] : null;
+                } else {
+                    const { data } = await sbClient.from('model_edits')
+                        .select('id')
+                        .eq('model_id', this.model.id)
+                        .eq('user_id', this.user.id)
+                        .eq('field_path', '__FLAG__')
+                        .maybeSingle();
+                    flags = data;
+                }
 
                 if (flags) {
                     this.flagId = flags.id; // Store ID so they can unflag it later
@@ -291,13 +326,26 @@ document.addEventListener('alpine:init', () => {
 
             try {
                 // 1. Delete the log entry
-                const { error } = await sbClient.from('model_edits').delete().eq('id', this.flagId);
-                if (error) throw error;
+                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                    await window.safeFetch(`/rest/v1/model_edits?id=eq.${this.flagId}`, {
+                        method: 'DELETE'
+                    });
+                } else {
+                    const { error } = await sbClient.from('model_edits').delete().eq('id', this.flagId);
+                    if (error) throw error;
+                }
 
                 // 2. NEW: Reset the public model status
-                await sbClient.from('models')
-                    .update({ is_flagged: false, flag_reason: null })
-                    .eq('id', this.model.id);
+                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                    await window.safeFetch(`/rest/v1/models?id=eq.${this.model.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ is_flagged: false, flag_reason: null })
+                    });
+                } else {
+                    await sbClient.from('models')
+                        .update({ is_flagged: false, flag_reason: null })
+                        .eq('id', this.model.id);
+                }
 
                 this.isFlagged = false;
                 this.flagId = null;
@@ -314,24 +362,52 @@ document.addEventListener('alpine:init', () => {
                     comment: this.flagComment
                 };
 
-                const { data, error } = await sbClient.from('model_edits').insert({
-                    model_id: this.model.id,
-                    user_id: this.user.id,
-                    field_path: '__FLAG__',
-                    old_value: '',
-                    new_value: JSON.stringify(payload),
-                    severity: 'major'
-                }).select().single();
+                let data, error;
+                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                    const res = await window.safeFetch('/rest/v1/model_edits', {
+                        method: 'POST',
+                        headers: { 'Prefer': 'return=representation' },
+                        body: JSON.stringify({
+                            model_id: this.model.id,
+                            user_id: this.user.id,
+                            field_path: '__FLAG__',
+                            old_value: '',
+                            new_value: JSON.stringify(payload),
+                            severity: 'major'
+                        })
+                    });
+                    if (res.error) error = res.error;
+                    else data = res.data[0];
+                } else {
+                    const res = await sbClient.from('model_edits').insert({
+                        model_id: this.model.id,
+                        user_id: this.user.id,
+                        field_path: '__FLAG__',
+                        old_value: '',
+                        new_value: JSON.stringify(payload),
+                        severity: 'major'
+                    }).select().single();
+                    data = res.data;
+                    error = res.error;
+                }
 
                 if (error) throw error;
 
                 // 2. NEW: Update the public model status so EVERYONE sees it
-                const { error: modelError } = await sbClient
-                    .from('models')
-                    .update({ is_flagged: true, flag_reason: this.flagReason })
-                    .eq('id', this.model.id);
+                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                    const res = await window.safeFetch(`/rest/v1/models?id=eq.${this.model.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ is_flagged: true, flag_reason: this.flagReason })
+                    });
+                    if (res.error) throw res.error;
+                } else {
+                    const { error: modelError } = await sbClient
+                        .from('models')
+                        .update({ is_flagged: true, flag_reason: this.flagReason })
+                        .eq('id', this.model.id);
 
-                if (modelError) throw modelError;
+                    if (modelError) throw modelError;
+                }
 
                 // Success State
                 this.isFlagged = true;
@@ -578,14 +654,28 @@ document.addEventListener('alpine:init', () => {
             for (const f of fields) {
                 // Stringify for robust comparison (handles arrays/objects)
                 if (JSON.stringify(f.old) !== JSON.stringify(f.new)) {
-                    await sbClient.from('model_edits').insert({
-                        model_id: this.model.id,
-                        user_id: this.user.id,
-                        field_path: f.path,
-                        old_value: JSON.stringify(f.old) || '',
-                        new_value: JSON.stringify(f.new) || '',
-                        severity: this.severities[f.path] || 'minor'
-                    });
+                    if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                        await window.safeFetch('/rest/v1/model_edits', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                model_id: this.model.id,
+                                user_id: this.user.id,
+                                field_path: f.path,
+                                old_value: JSON.stringify(f.old) || '',
+                                new_value: JSON.stringify(f.new) || '',
+                                severity: this.severities[f.path] || 'minor'
+                            })
+                        });
+                    } else {
+                        await sbClient.from('model_edits').insert({
+                            model_id: this.model.id,
+                            user_id: this.user.id,
+                            field_path: f.path,
+                            old_value: JSON.stringify(f.old) || '',
+                            new_value: JSON.stringify(f.new) || '',
+                            severity: this.severities[f.path] || 'minor'
+                        });
+                    }
                 }
             }
 
@@ -598,10 +688,20 @@ document.addEventListener('alpine:init', () => {
             if (shouldVerify) {
                 updatePayload.is_verified = true;
                 updatePayload.verified_by = this.user.id;
-                updatePayload.verification_date = new Date();
+                updatePayload.verification_date = new Date(); // SafeFetch handles date serialization? JSON.stringify works.
             }
 
-            const { error } = await sbClient.from('models').update(updatePayload).eq('id', this.model.id);
+            let error;
+            if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                const res = await window.safeFetch(`/rest/v1/models?id=eq.${this.model.id}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify(updatePayload)
+                });
+                error = res.error;
+            } else {
+                const res = await sbClient.from('models').update(updatePayload).eq('id', this.model.id);
+                error = res.error;
+            }
 
             if (!error) {
                 this.model.card_data = this.draft;
@@ -612,7 +712,7 @@ document.addEventListener('alpine:init', () => {
                     alert('Changes Saved (Not Verified)!');
                 }
             } else {
-                alert('Save failed: ' + error.message);
+                alert('Save failed: ' + (error.message || JSON.stringify(error)));
             }
         }
     }));
