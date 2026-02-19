@@ -348,7 +348,13 @@ document.addEventListener('alpine:init', () => {
 
         // --- ACTIONS ---
         downloadJson() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.model.card_data, null, 4));
+            // [FIX] Sanitize before download
+            const cleanData = JSON.parse(JSON.stringify(this.model.card_data));
+            delete cleanData.is_verified;
+            delete cleanData.id;
+            delete cleanData.created_at;
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cleanData, null, 4));
             const a = document.createElement('a');
             a.href = dataStr;
             a.download = (this.model.card_data.Model.Name.replace(/[^a-z0-9]/gi, '_').toLowerCase()) + "_card.json";
@@ -428,27 +434,41 @@ document.addEventListener('alpine:init', () => {
             if (!confirm("Remove your flag?")) return;
 
             try {
-                // 1. Delete the log entry
-                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
-                    await window.safeFetch(`/rest/v1/model_edits?id=eq.${this.flagId}`, {
-                        method: 'DELETE'
-                    });
-                } else {
-                    const { error } = await sbClient.from('model_edits').delete().eq('id', this.flagId);
-                    if (error) throw error;
-                }
+                let token = this.session?.access_token || Alpine.store('auth')?.session?.access_token;
+                const url = (typeof SUPABASE_URL !== 'undefined') ? SUPABASE_URL : sbClient.supabaseUrl;
+                const key = (typeof SUPABASE_KEY !== 'undefined') ? SUPABASE_KEY : sbClient.supabaseKey;
 
-                // 2. NEW: Reset the public model status
-                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
-                    await window.safeFetch(`/rest/v1/models?id=eq.${this.model.id}`, {
-                        method: 'PATCH',
-                        body: JSON.stringify({ is_flagged: false, flag_reason: null })
-                    });
-                } else {
-                    await sbClient.from('models')
-                        .update({ is_flagged: false, flag_reason: null })
-                        .eq('id', this.model.id);
-                }
+                // 1. Delete the log entry via Raw Fetch
+                const controller1 = new AbortController();
+                const id1 = setTimeout(() => controller1.abort(), 5000);
+
+                await fetch(`${url}/rest/v1/model_edits?id=eq.${this.flagId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'apikey': key,
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    signal: controller1.signal
+                });
+                clearTimeout(id1);
+
+                // 2. NEW: Reset the public model status via Raw Fetch
+                const controller2 = new AbortController();
+                const id2 = setTimeout(() => controller2.abort(), 5000);
+
+                await fetch(`${url}/rest/v1/models?id=eq.${this.model.id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': key,
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({ is_flagged: false, flag_reason: null }),
+                    signal: controller2.signal
+                });
+                clearTimeout(id2);
 
                 this.isFlagged = false;
                 this.flagId = null;
@@ -468,52 +488,55 @@ document.addEventListener('alpine:init', () => {
                     comment: this.flagComment
                 };
 
-                let data, error;
-                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
-                    const res = await window.safeFetch('/rest/v1/model_edits', {
-                        method: 'POST',
-                        headers: { 'Prefer': 'return=representation' },
-                        body: JSON.stringify({
-                            model_id: this.model.id,
-                            user_id: this.user.id,
-                            field_path: '__FLAG__',
-                            old_value: '',
-                            new_value: JSON.stringify(payload),
-                            severity: 'major'
-                        })
-                    });
-                    if (res.error) error = res.error;
-                    else data = res.data[0];
-                } else {
-                    const res = await sbClient.from('model_edits').insert({
+                let token = this.session?.access_token || Alpine.store('auth')?.session?.access_token;
+                const url = (typeof SUPABASE_URL !== 'undefined') ? SUPABASE_URL : sbClient.supabaseUrl;
+                const key = (typeof SUPABASE_KEY !== 'undefined') ? SUPABASE_KEY : sbClient.supabaseKey;
+
+                // 1. Insert Log
+                const controller1 = new AbortController();
+                const id1 = setTimeout(() => controller1.abort(), 5000);
+
+                const res1 = await fetch(`${url}/rest/v1/model_edits`, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': key,
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify({
                         model_id: this.model.id,
                         user_id: this.user.id,
                         field_path: '__FLAG__',
                         old_value: '',
                         new_value: JSON.stringify(payload),
                         severity: 'major'
-                    }).select().single();
-                    data = res.data;
-                    error = res.error;
-                }
+                    }),
+                    signal: controller1.signal
+                });
+                clearTimeout(id1);
 
-                if (error) throw error;
+                if (!res1.ok) throw new Error("Flag log failed");
+                const data = (await res1.json())[0];
 
-                // 2. NEW: Update the public model status so EVERYONE sees it
-                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
-                    const res = await window.safeFetch(`/rest/v1/models?id=eq.${this.model.id}`, {
-                        method: 'PATCH',
-                        body: JSON.stringify({ is_flagged: true, flag_reason: this.flagReason })
-                    });
-                    if (res.error) throw res.error;
-                } else {
-                    const { error: modelError } = await sbClient
-                        .from('models')
-                        .update({ is_flagged: true, flag_reason: this.flagReason })
-                        .eq('id', this.model.id);
+                // 2. Update Model Status
+                const controller2 = new AbortController();
+                const id2 = setTimeout(() => controller2.abort(), 5000);
 
-                    if (modelError) throw modelError;
-                }
+                const res2 = await fetch(`${url}/rest/v1/models?id=eq.${this.model.id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': key,
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({ is_flagged: true, flag_reason: this.flagReason }),
+                    signal: controller2.signal
+                });
+                clearTimeout(id2);
+
+                if (!res2.ok) throw new Error("Flag update failed");
 
                 // Success State
                 this.isFlagged = true;
@@ -672,6 +695,7 @@ document.addEventListener('alpine:init', () => {
 
             if (!this.user) {
                 console.error("[Details] No user found even after ensureSession");
+                alert("Authentication failed. Please reload the page and try again.");
                 return;
             }
 
@@ -682,6 +706,54 @@ document.addEventListener('alpine:init', () => {
                     alert("Model is flagged. Changes will be saved, but verification is disabled until the flag is resolved.");
                     shouldVerify = false;
                 }
+
+                // [FIX] Double-Write Verification:
+                // If verifying, ALSO create a model_edit logs. This ensures that if RLS blocks the direct 
+                // 'models' update (silently), the verification request is still persisted in 'model_edits'.
+                if (shouldVerify) {
+                    console.log("[Details] Double-Write: Inserting is_verified log via RAW FETCH...");
+                    const verifyPayload = {
+                        model_id: this.model.id,
+                        user_id: this.user.id,
+                        field_path: 'is_verified',
+                        old_value: 'false',
+                        new_value: 'true',
+                        severity: 'major'
+                    };
+
+                    try {
+                        let token = this.session?.access_token || Alpine.store('auth')?.session?.access_token;
+                        if (!token) throw new Error("No token for raw fetch");
+
+                        // Use global constants from app.js or fallback to client props
+                        const url = (typeof SUPABASE_URL !== 'undefined') ? SUPABASE_URL : sbClient.supabaseUrl;
+                        const key = (typeof SUPABASE_KEY !== 'undefined') ? SUPABASE_KEY : sbClient.supabaseKey;
+
+                        const controller = new AbortController();
+                        const id = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+                        const res = await fetch(`${url}/rest/v1/model_edits`, {
+                            method: 'POST',
+                            headers: {
+                                'apikey': key,
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json',
+                                'Prefer': 'return=minimal'
+                            },
+                            body: JSON.stringify(verifyPayload),
+                            signal: controller.signal
+                        });
+                        clearTimeout(id);
+
+                        if (!res.ok) throw new Error(`Raw Fetch Failed: ${res.status} ${res.statusText}`);
+
+                        console.log("[Details] Double-Write: Success.");
+                    } catch (verifyErr) {
+                        console.error("[Details] Double-Write: Failed (continuing)", verifyErr);
+                    }
+                }
+
+                console.log("[Details] Checking field diffs...");
 
                 // [NEW] Merge Modalities and Specialties back into Content
                 // Preserve any existing codes that are NOT in our managed lists (to be safe)
@@ -790,18 +862,46 @@ document.addEventListener('alpine:init', () => {
                                 })
                             });
                         } else {
-                            await sbClient.from('model_edits').insert({
-                                model_id: this.model.id,
-                                user_id: this.user.id,
-                                field_path: f.path,
-                                old_value: JSON.stringify(f.old) || '',
-                                new_value: JSON.stringify(f.new) || '',
-                                severity: this.severities[f.path] || 'minor'
-                            });
+                            // Use Raw Fetch for Audit Logs too (Anti-Hang)
+                            try {
+                                let token = this.session?.access_token || Alpine.store('auth')?.session?.access_token;
+                                const url = (typeof SUPABASE_URL !== 'undefined') ? SUPABASE_URL : sbClient.supabaseUrl;
+                                const key = (typeof SUPABASE_KEY !== 'undefined') ? SUPABASE_KEY : sbClient.supabaseKey;
+
+                                const controller = new AbortController();
+                                const id = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+                                await fetch(`${url}/rest/v1/model_edits`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'apikey': key,
+                                        'Authorization': `Bearer ${token}`,
+                                        'Content-Type': 'application/json',
+                                        'Prefer': 'return=minimal'
+                                    },
+                                    body: JSON.stringify({
+                                        model_id: this.model.id,
+                                        user_id: this.user.id,
+                                        field_path: f.path,
+                                        old_value: JSON.stringify(f.old) || '',
+                                        new_value: JSON.stringify(f.new) || '',
+                                        severity: this.severities[f.path] || 'minor'
+                                    }),
+                                    signal: controller.signal
+                                });
+                                clearTimeout(id);
+                            } catch (auditErr) {
+                                console.error(`[Details] Failed to log edit for ${f.path}`, auditErr);
+                            }
                         }
                         console.log(`[Details] Edit saved for ${f.path}`);
                     }
                 }
+
+                // [FIX] Sanitize Draft (Remove system fields that shouldn't be in JSON)
+                if (this.draft.is_verified !== undefined) delete this.draft.is_verified;
+                if (this.draft.id !== undefined) delete this.draft.id;
+                if (this.draft.created_at !== undefined) delete this.draft.created_at;
 
                 // Prepare Update Payload
                 const updatePayload = {
@@ -815,16 +915,45 @@ document.addEventListener('alpine:init', () => {
                     updatePayload.verification_date = new Date(); // SafeFetch handles date serialization? JSON.stringify works.
                 }
 
+                console.log("[Details] Sending final models update via RAW FETCH...");
                 let error;
-                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
-                    const res = await window.safeFetch(`/rest/v1/models?id=eq.${this.model.id}`, {
+
+                try {
+                    // Use Raw Fetch for the final update to avoid sbClient locks
+                    let token = this.session?.access_token || Alpine.store('auth')?.session?.access_token;
+                    if (!token) throw new Error("No token for update");
+
+                    const url = (typeof SUPABASE_URL !== 'undefined') ? SUPABASE_URL : sbClient.supabaseUrl;
+                    const key = (typeof SUPABASE_KEY !== 'undefined') ? SUPABASE_KEY : sbClient.supabaseKey;
+
+                    const controller = new AbortController();
+                    const id = setTimeout(() => controller.abort(), 8000); // 8s timeout for main save
+
+                    const res = await fetch(`${url}/rest/v1/models?id=eq.${this.model.id}`, {
                         method: 'PATCH',
-                        body: JSON.stringify(updatePayload)
+                        headers: {
+                            'apikey': key,
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                            'Prefer': 'return=minimal'
+                        },
+                        body: JSON.stringify(updatePayload),
+                        signal: controller.signal
                     });
-                    error = res.error;
-                } else {
-                    const res = await sbClient.from('models').update(updatePayload).eq('id', this.model.id);
-                    error = res.error;
+                    clearTimeout(id);
+
+                    if (!res.ok) {
+                        const json = await res.json().catch(() => null);
+                        throw { message: (json?.message || res.statusText), details: json };
+                    }
+
+                    // Success (no error)
+                    error = null;
+
+                } catch (err) {
+                    error = err;
+                    // Fallback: If raw fetch failed purely due to network/token, maybe try sbClient? 
+                    // No, if raw fetch fails, sbClient is likely dead too.
                 }
 
                 if (!error) {
@@ -833,7 +962,7 @@ document.addEventListener('alpine:init', () => {
                         this.model.is_verified = true;
                         alert('Verified & Saved!');
                     } else {
-                        alert('Changes Saved (Not Verified)!');
+                        alert('Changes Saved!');
                     }
                 } else {
                     console.error("[Details] Save error:", error);
