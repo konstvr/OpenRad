@@ -552,167 +552,179 @@ document.addEventListener('alpine:init', () => {
         },
 
         async saveChanges(shouldVerify = true) {
-            if (!this.user) return;
-
-            // [NEW] Prevent verification if flagged
-            if (this.isFlagged && shouldVerify) {
-                alert("Model is flagged. Changes will be saved, but verification is disabled until the flag is resolved.");
-                shouldVerify = false;
+            console.log("[Details] saveChanges triggered. Verify:", shouldVerify);
+            if (!this.user) {
+                console.warn("[Details] saveChanges: No user logged in.");
+                return;
             }
 
-            // [NEW] Merge Modalities and Specialties back into Content
-            // Preserve any existing codes that are NOT in our managed lists (to be safe)
-            const originalContent = this.draft.Model.Indexing?.Content || [];
-            const otherCodes = Array.isArray(originalContent)
-                ? originalContent.filter(c => !MODALITY_CODES.includes(c) && !SUBSPECIALTY_CODES.includes(c))
-                : [];
+            try {
 
-            // Combine all
-            const newContent = [
-                ...otherCodes,
-                ...(this.draft._selectedModalities || []),
-                ...(this.draft._selectedSpecialties || [])
-            ];
+                // [NEW] Prevent verification if flagged
+                if (this.isFlagged && shouldVerify) {
+                    alert("Model is flagged. Changes will be saved, but verification is disabled until the flag is resolved.");
+                    shouldVerify = false;
+                }
 
-            // Assign back to draft
-            if (!this.draft.Model.Indexing) this.draft.Model.Indexing = {};
-            this.draft.Model.Indexing.Content = newContent;
+                // [NEW] Merge Modalities and Specialties back into Content
+                // Preserve any existing codes that are NOT in our managed lists (to be safe)
+                const originalContent = this.draft.Model.Indexing?.Content || [];
+                const otherCodes = Array.isArray(originalContent)
+                    ? originalContent.filter(c => !MODALITY_CODES.includes(c) && !SUBSPECIALTY_CODES.includes(c))
+                    : [];
 
-            // [NEW] Parse Authors and Organizations Strings back to Arrays
-            const parseListToObjects = (str) => {
-                if (!str) return [];
-                return str.split(';')
-                    .map(s => s.trim())
-                    .filter(s => s.length > 0)
-                    .map(name => ({ Name: name }));
-            };
+                // Combine all
+                const newContent = [
+                    ...otherCodes,
+                    ...(this.draft._selectedModalities || []),
+                    ...(this.draft._selectedSpecialties || [])
+                ];
 
-            this.draft.Model.Descriptors.Authors = parseListToObjects(this.draft._authorsString);
-            this.draft.Model.Descriptors.Organizations = parseListToObjects(this.draft._organizationsString);
+                // Assign back to draft
+                if (!this.draft.Model.Indexing) this.draft.Model.Indexing = {};
+                this.draft.Model.Indexing.Content = newContent;
 
-            const fields = [
-                { path: 'Model.Name', old: this.model.card_data.Model.Name, new: this.draft.Model.Name },
-                { path: 'Model.Link', old: this.model.card_data.Model.Link, new: this.draft.Model.Link },
-                { path: 'Model.atlas_link', old: this.getAtlasLink(), new: this.draft.Model.atlas_link },
-                {
-                    path: 'Model.Model properties.repository_analysis.demo_link',
-                    old: this.model.card_data.Model['Model properties']?.repository_analysis?.demo_link,
-                    new: this.draft.Model['Model properties'].repository_analysis.demo_link
-                },
-                {
-                    path: 'Model.Model properties.repository_analysis.contains_weights',
-                    old: this.model.card_data.Model['Model properties']?.repository_analysis?.contains_weights,
-                    new: this.draft.Model['Model properties'].repository_analysis.contains_weights
-                },
-                {
-                    path: 'Model.Descriptors.References.0.PaperLink',
-                    old: this.model.card_data.Model.Descriptors?.References?.[0]?.PaperLink,
-                    new: this.draft.Model.Descriptors.References[0].PaperLink
-                },
-                {
-                    path: 'Model.Descriptors.References.0.DOI',
-                    old: this.model.card_data.Model.Descriptors?.References?.[0]?.DOI,
-                    new: this.draft.Model.Descriptors.References[0].DOI
-                },
-                {
-                    path: 'Model.Descriptors.References.0.Title',
-                    old: this.model.card_data.Model.Descriptors?.References?.[0]?.Title,
-                    new: this.draft.Model.Descriptors.References[0].Title
-                },
-                {
-                    path: 'Model.Descriptors.Authors',
-                    old: this.model.card_data.Model.Descriptors?.Authors,
-                    new: this.draft.Model.Descriptors.Authors
-                },
-                {
-                    path: 'Model.Descriptors.Organizations',
-                    old: this.model.card_data.Model.Descriptors?.Organizations,
-                    new: this.draft.Model.Descriptors.Organizations
-                },
-                {
-                    path: 'Model.Descriptors.Funding',
-                    old: this.model.card_data.Model.Descriptors?.Funding,
-                    new: this.draft.Model.Descriptors.Funding
-                },
-                {
-                    path: 'Model.Model properties.Sustainability',
-                    old: this.model.card_data.Model['Model properties'].Sustainability,
-                    new: this.draft.Model['Model properties'].Sustainability
-                },
-                { path: 'Model.Model properties.Architecture', old: this.model.card_data.Model['Model properties'].Architecture, new: this.draft.Model['Model properties'].Architecture },
-                { path: 'Model.Model properties.Dataset', old: this.model.card_data.Model['Model properties'].Dataset, new: this.draft.Model['Model properties'].Dataset },
-                { path: 'Model.Model properties.Indications for use', old: this.model.card_data.Model['Model properties']['Indications for use'], new: this.draft.Model['Model properties']['Indications for use'] },
-                { path: 'Model.Model performance.Comments', old: this.model.card_data.Model['Model performance']?.Comments, new: this.draft.Model['Model performance']?.Comments },
-                { path: 'Model.Model properties.Limitations', old: this.model.card_data.Model['Model properties'].Limitations, new: this.draft.Model['Model properties'].Limitations },
-                { path: 'Model.Model properties.Use', old: this.model.card_data.Model['Model properties'].Use, new: this.draft.Model['Model properties'].Use },
-                { path: 'Model.Model properties.Validation', old: this.model.card_data.Model['Model properties'].Validation, new: this.draft.Model['Model properties'].Validation },
-                { path: 'Model.Model properties.Regulatory information.Comment', old: this.model.card_data.Model['Model properties']['Regulatory information']?.Comment, new: this.draft.Model['Model properties']['Regulatory information']?.Comment },
-                // [NEW] Merged Content field
-                { path: 'Model.Indexing.Content', old: this.model.card_data.Model.Indexing?.Content, new: this.draft.Model.Indexing.Content }
-            ];
+                // [NEW] Parse Authors and Organizations Strings back to Arrays
+                const parseListToObjects = (str) => {
+                    if (!str) return [];
+                    return str.split(';')
+                        .map(s => s.trim())
+                        .filter(s => s.length > 0)
+                        .map(name => ({ Name: name }));
+                };
 
-            for (const f of fields) {
-                // Stringify for robust comparison (handles arrays/objects)
-                if (JSON.stringify(f.old) !== JSON.stringify(f.new)) {
-                    if (window.safeFetch && Alpine.store('auth').useRawFetch) {
-                        await window.safeFetch('/rest/v1/model_edits', {
-                            method: 'POST',
-                            body: JSON.stringify({
+                this.draft.Model.Descriptors.Authors = parseListToObjects(this.draft._authorsString);
+                this.draft.Model.Descriptors.Organizations = parseListToObjects(this.draft._organizationsString);
+
+                const fields = [
+                    { path: 'Model.Name', old: this.model.card_data.Model.Name, new: this.draft.Model.Name },
+                    { path: 'Model.Link', old: this.model.card_data.Model.Link, new: this.draft.Model.Link },
+                    { path: 'Model.atlas_link', old: this.getAtlasLink(), new: this.draft.Model.atlas_link },
+                    {
+                        path: 'Model.Model properties.repository_analysis.demo_link',
+                        old: this.model.card_data.Model['Model properties']?.repository_analysis?.demo_link,
+                        new: this.draft.Model['Model properties'].repository_analysis.demo_link
+                    },
+                    {
+                        path: 'Model.Model properties.repository_analysis.contains_weights',
+                        old: this.model.card_data.Model['Model properties']?.repository_analysis?.contains_weights,
+                        new: this.draft.Model['Model properties'].repository_analysis.contains_weights
+                    },
+                    {
+                        path: 'Model.Descriptors.References.0.PaperLink',
+                        old: this.model.card_data.Model.Descriptors?.References?.[0]?.PaperLink,
+                        new: this.draft.Model.Descriptors.References[0].PaperLink
+                    },
+                    {
+                        path: 'Model.Descriptors.References.0.DOI',
+                        old: this.model.card_data.Model.Descriptors?.References?.[0]?.DOI,
+                        new: this.draft.Model.Descriptors.References[0].DOI
+                    },
+                    {
+                        path: 'Model.Descriptors.References.0.Title',
+                        old: this.model.card_data.Model.Descriptors?.References?.[0]?.Title,
+                        new: this.draft.Model.Descriptors.References[0].Title
+                    },
+                    {
+                        path: 'Model.Descriptors.Authors',
+                        old: this.model.card_data.Model.Descriptors?.Authors,
+                        new: this.draft.Model.Descriptors.Authors
+                    },
+                    {
+                        path: 'Model.Descriptors.Organizations',
+                        old: this.model.card_data.Model.Descriptors?.Organizations,
+                        new: this.draft.Model.Descriptors.Organizations
+                    },
+                    {
+                        path: 'Model.Descriptors.Funding',
+                        old: this.model.card_data.Model.Descriptors?.Funding,
+                        new: this.draft.Model.Descriptors.Funding
+                    },
+                    {
+                        path: 'Model.Model properties.Sustainability',
+                        old: this.model.card_data.Model['Model properties']?.Sustainability,
+                        new: this.draft.Model['Model properties'].Sustainability
+                    },
+                    { path: 'Model.Model properties.Architecture', old: this.model.card_data.Model['Model properties']?.Architecture, new: this.draft.Model['Model properties'].Architecture },
+                    { path: 'Model.Model properties.Dataset', old: this.model.card_data.Model['Model properties']?.Dataset, new: this.draft.Model['Model properties'].Dataset },
+                    { path: 'Model.Model properties.Indications for use', old: this.model.card_data.Model['Model properties']?.['Indications for use'], new: this.draft.Model['Model properties']['Indications for use'] },
+                    { path: 'Model.Model performance.Comments', old: this.model.card_data.Model['Model performance']?.Comments, new: this.draft.Model['Model performance']?.Comments },
+                    { path: 'Model.Model properties.Limitations', old: this.model.card_data.Model['Model properties']?.Limitations, new: this.draft.Model['Model properties'].Limitations },
+                    { path: 'Model.Model properties.Use', old: this.model.card_data.Model['Model properties']?.Use, new: this.draft.Model['Model properties'].Use },
+                    { path: 'Model.Model properties.Validation', old: this.model.card_data.Model['Model properties']?.Validation, new: this.draft.Model['Model properties'].Validation },
+                    { path: 'Model.Model properties.Regulatory information.Comment', old: this.model.card_data.Model['Model properties']?.['Regulatory information']?.Comment, new: this.draft.Model['Model properties']['Regulatory information']?.Comment },
+                    // [NEW] Merged Content field
+                    { path: 'Model.Indexing.Content', old: this.model.card_data.Model.Indexing?.Content, new: this.draft.Model.Indexing.Content }
+                ];
+
+                for (const f of fields) {
+                    // Stringify for robust comparison (handles arrays/objects)
+                    if (JSON.stringify(f.old) !== JSON.stringify(f.new)) {
+                        if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                            await window.safeFetch('/rest/v1/model_edits', {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    model_id: this.model.id,
+                                    user_id: this.user.id,
+                                    field_path: f.path,
+                                    old_value: JSON.stringify(f.old) || '',
+                                    new_value: JSON.stringify(f.new) || '',
+                                    severity: this.severities[f.path] || 'minor'
+                                })
+                            });
+                        } else {
+                            await sbClient.from('model_edits').insert({
                                 model_id: this.model.id,
                                 user_id: this.user.id,
                                 field_path: f.path,
                                 old_value: JSON.stringify(f.old) || '',
                                 new_value: JSON.stringify(f.new) || '',
                                 severity: this.severities[f.path] || 'minor'
-                            })
-                        });
-                    } else {
-                        await sbClient.from('model_edits').insert({
-                            model_id: this.model.id,
-                            user_id: this.user.id,
-                            field_path: f.path,
-                            old_value: JSON.stringify(f.old) || '',
-                            new_value: JSON.stringify(f.new) || '',
-                            severity: this.severities[f.path] || 'minor'
-                        });
+                            });
+                        }
                     }
                 }
-            }
 
-            // Prepare Update Payload
-            const updatePayload = {
-                card_data: this.draft
-            };
+                // Prepare Update Payload
+                const updatePayload = {
+                    card_data: this.draft
+                };
 
-            // Only add verification data if requested
-            if (shouldVerify) {
-                updatePayload.is_verified = true;
-                updatePayload.verified_by = this.user.id;
-                updatePayload.verification_date = new Date(); // SafeFetch handles date serialization? JSON.stringify works.
-            }
-
-            let error;
-            if (window.safeFetch && Alpine.store('auth').useRawFetch) {
-                const res = await window.safeFetch(`/rest/v1/models?id=eq.${this.model.id}`, {
-                    method: 'PATCH',
-                    body: JSON.stringify(updatePayload)
-                });
-                error = res.error;
-            } else {
-                const res = await sbClient.from('models').update(updatePayload).eq('id', this.model.id);
-                error = res.error;
-            }
-
-            if (!error) {
-                this.model.card_data = this.draft;
+                // Only add verification data if requested
                 if (shouldVerify) {
-                    this.model.is_verified = true;
-                    alert('Verified & Saved!');
-                } else {
-                    alert('Changes Saved (Not Verified)!');
+                    updatePayload.is_verified = true;
+                    updatePayload.verified_by = this.user.id;
+                    updatePayload.verification_date = new Date(); // SafeFetch handles date serialization? JSON.stringify works.
                 }
-            } else {
-                alert('Save failed: ' + (error.message || JSON.stringify(error)));
+
+                let error;
+                if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                    const res = await window.safeFetch(`/rest/v1/models?id=eq.${this.model.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify(updatePayload)
+                    });
+                    error = res.error;
+                } else {
+                    const res = await sbClient.from('models').update(updatePayload).eq('id', this.model.id);
+                    error = res.error;
+                }
+
+                if (!error) {
+                    this.model.card_data = this.draft;
+                    if (shouldVerify) {
+                        this.model.is_verified = true;
+                        alert('Verified & Saved!');
+                    } else {
+                        alert('Changes Saved (Not Verified)!');
+                    }
+                } else {
+                    console.error("[Details] Save error:", error);
+                    alert('Save failed: ' + (error.message || JSON.stringify(error)));
+                }
+
+            } catch (e) {
+                console.error("[Details] Critical error in saveChanges:", e);
+                alert("Critical error saving changes: " + e.message);
             }
         }
     }));
