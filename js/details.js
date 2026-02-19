@@ -7,7 +7,11 @@ document.addEventListener('alpine:init', () => {
         draft: null,
         severities: {},
         copySuccess: false,
+        copySuccess: false,
         isAdmin: false,
+
+        // Session State
+        keepAliveInterval: null,
 
         // Flagging State
         flagModalOpen: false,
@@ -141,7 +145,102 @@ document.addEventListener('alpine:init', () => {
                 }
             }
 
+            // [NEW] Start Background Keep-Alive
+            this.startKeepAlive();
+
             this.loading = false;
+        },
+
+        destroy() {
+            if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
+        },
+
+        // --- AUTH HELPERS ---
+        async startKeepAlive() {
+            console.log("[Details] Starting Keep-Alive (every 2m)...");
+            if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
+
+            // Check immediately once
+            // await this.ensureSession().catch(e => console.warn("Initial keep-alive check failed:", e));
+
+            // Then every 2 minutes (120000ms)
+            // Token usually lasts 1hr (3600s). 2min is very safe.
+            this.keepAliveInterval = setInterval(async () => {
+                console.log("[Details] Keeping session alive...");
+                try {
+                    await this.ensureSession();
+                } catch (e) {
+                    console.warn("[Details] Keep-alive failed:", e);
+                }
+            }, 120000);
+        },
+
+        async ensureSession() {
+            // [CRITICAL FIX] Do NOT call getSession() first. It locks.
+            // Rely on our local cache of the session or the auth store's session
+
+            // 1. Sync with store if possible
+            const authStore = Alpine.store('auth');
+            if (authStore && authStore.session) {
+                this.session = authStore.session;
+                this.user = authStore.user;
+            }
+
+            if (!this.session) {
+                console.warn("[Details] No cached session found. Checking via simple refresh if user exists...");
+                // If we think we have a user but no session object, we might be in trouble.
+                // Try one desperate refresh if user is known.
+                if (this.user) {
+                    const { data, error } = await sbClient.auth.refreshSession();
+                    if (error) throw error;
+                    this.session = data.session;
+                    this.user = data.user;
+                    return this.user;
+                }
+                return null; // Not logged in
+            }
+
+            const now = Math.floor(Date.now() / 1000);
+            const expiresAt = this.session.expires_at;
+
+            // If we don't have expiration, assume safe (or handled by auto-refresh logic elsewhere)
+            if (!expiresAt) return this.user;
+
+            const timeRemaining = expiresAt - now;
+            console.log(`[Details] Session check: Expires in ${timeRemaining}s`);
+
+            // 2. Check if expiring soon (within 5 mins = 300s)
+            if (timeRemaining < 300) {
+                console.log("[Details] Session expiring soon. Refreshing...");
+
+                // Retry Logic for Refresh (Just in case of network blip)
+                let attempts = 0;
+                let refreshed = false;
+
+                while (attempts < 3 && !refreshed) {
+                    try {
+                        const { data, error } = await sbClient.auth.refreshSession();
+                        if (error) throw error;
+
+                        this.session = data.session;
+                        this.user = data.user;
+                        if (authStore) {
+                            authStore.session = data.session;
+                            authStore.user = data.user;
+                        }
+                        console.log("[Details] Session refreshed successfully.");
+                        refreshed = true;
+                    } catch (err) {
+                        console.warn(`[Details] Refresh attempt ${attempts + 1} failed:`, err);
+                        attempts++;
+                        await new Promise(r => setTimeout(r, 1000)); // Wait 1s
+                    }
+                }
+
+                if (!refreshed) throw new Error("Failed to refresh session after 3 attempts");
+            }
+
+            return this.user;
         },
 
         // --- UI HELPERS ---
@@ -303,8 +402,12 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        handleFlagClick() {
-            if (!this.user) {
+        async handleFlagClick() {
+            console.log("[Details] handleFlagClick");
+            try {
+                await this.ensureSession();
+            } catch (e) {
+                console.error("[Details] Auth check failed for flag click:", e);
                 alert("Please log in to flag models.");
                 return;
             }
@@ -356,7 +459,10 @@ document.addEventListener('alpine:init', () => {
         },
 
         async submitFlag() {
+            console.log("[Details] submitFlag");
             try {
+                await this.ensureSession();
+
                 const payload = {
                     reason: this.flagReason,
                     comment: this.flagComment
@@ -552,7 +658,22 @@ document.addEventListener('alpine:init', () => {
         },
 
         async saveChanges(shouldVerify = true) {
-            if (!this.user) return;
+            console.log(`[Details] saveChanges initiated (Verify: ${shouldVerify})`);
+
+            try {
+                // Ensure session is valid *before* we start processing
+                // This uses the cached check, preventing locks
+                await this.ensureSession();
+            } catch (authErr) {
+                console.error("[Details] Auth verification failed during save:", authErr);
+                alert("Session expired. Please copy your changes and reload the page.");
+                return;
+            }
+
+            if (!this.user) {
+                console.error("[Details] No user found even after ensureSession");
+                return;
+            }
 
             try {
 
@@ -678,6 +799,7 @@ document.addEventListener('alpine:init', () => {
                                 severity: this.severities[f.path] || 'minor'
                             });
                         }
+                        console.log(`[Details] Edit saved for ${f.path}`);
                     }
                 }
 
