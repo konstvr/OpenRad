@@ -59,13 +59,7 @@
             class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 transition-colors duration-300">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <div class="relative w-8 h-8 flex items-center justify-center">
-                        <div
-                            class="absolute inset-0 bg-gradient-to-tr from-blue-600 to-violet-600 rounded-lg shadow-lg opacity-100">
-                        </div>
-                        <span class="relative text-white font-bold text-sm">OR</span>
-                    </div>
-                    <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">OpenRad</h1>
+                    <img src="images/logo.png" alt="OpenRad Logo" class="h-20 w-auto">
                 </div>
 
                 <div class="flex items-center gap-4">
@@ -185,14 +179,14 @@
                             <label
                                 class="flex items-center justify-between p-2.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-green-300 transition">
                                 <span
-                                    class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Weights
-                                    Available</span>
+                                    class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Weight
+                                    Availability</span>
                                 <input type="checkbox" x-model="filterWeights" class="w-4 h-4 text-green-600 rounded">
                             </label>
                             <label
                                 class="flex items-center justify-between p-2.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-300 transition">
                                 <span
-                                    class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Interactive
+                                    class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Available
                                     Demo</span>
                                 <input type="checkbox" x-model="filterDemo" class="w-4 h-4 text-blue-600 rounded">
                             </label>
@@ -369,19 +363,21 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div
                             class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                            <h3 class="text-lg font-bold text-slate-500 uppercase mb-4">Distribution by Modality</h3>
+                            <h3 class="text-lg font-bold text-slate-500 uppercase mb-4">Distribution across Modalities
+                            </h3>
                             <div class="h-64 relative"><canvas id="modalityChart"></canvas></div>
                         </div>
                         <div
                             class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                            <h3 class="text-lg font-bold text-slate-500 uppercase mb-4">Weights Availability</h3>
+                            <h3 class="text-lg font-bold text-slate-500 uppercase mb-4">Weight Availability</h3>
                             <div class="h-64 relative"><canvas id="weightsChart"></canvas></div>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div
                             class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                            <h3 class="text-lg font-bold text-slate-500 uppercase mb-4">Distribution by Subspecialty
+                            <h3 class="text-lg font-bold text-slate-500 uppercase mb-4">Distribution across Radiology
+                                Subspecialties
                             </h3>
                             <div class="h-80 relative"><canvas id="specialtyChart"></canvas></div>
                         </div>
