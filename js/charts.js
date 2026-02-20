@@ -1,4 +1,5 @@
 // js/charts.js
+Chart.defaults.font.size = 14;
 let chartInstances = {};
 
 // Modified to accept direct stats object
@@ -25,8 +26,8 @@ function renderDashboardCharts(models, stats) {
 
         // 2. Specialty Chart
         if (stats && stats.specialties) {
-            const labels = Object.keys(stats.specialties);
-            const data = Object.values(stats.specialties);
+            const labels = Object.keys(stats.specialties).filter(l => l !== 'QI');
+            const data = labels.map(l => stats.specialties[l]);
             const sorted = labels.map((l, i) => ({ l, d: data[i] })).sort((a, b) => b.d - a.d);
 
             drawChart('specialtyChart', 'bar',
@@ -39,8 +40,9 @@ function renderDashboardCharts(models, stats) {
 
         // 3. Validation
         if (stats && stats.validation) {
-            const labels = Object.keys(stats.validation);
-            const data = Object.values(stats.validation);
+            const allowed = ['n/a', 'internal', 'external'];
+            const labels = Object.keys(stats.validation).filter(l => allowed.includes(l));
+            const data = labels.map(l => stats.validation[l]);
             drawChart('validationChart', 'pie', labels, null, labels.map(l => l.charAt(0).toUpperCase() + l.slice(1)), data);
         }
 
