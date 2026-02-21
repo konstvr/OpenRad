@@ -384,8 +384,22 @@ document.addEventListener('alpine:init', () => {
         },
 
         async logout() {
-            await sbClient.auth.signOut();
-            window.location.href = 'index.html';
+            try {
+                // Race the official signout against a 2s timeout
+                const signOutPromise = sbClient.auth.signOut().catch(err => { throw err; });
+                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("SignOutTimeout")), 2000));
+                await Promise.race([signOutPromise, timeoutPromise]);
+            } catch (err) {
+                console.warn("[Auth] Official SignOut failed or timed out. Forcing local logout.", err);
+            } finally {
+                // Always aggressively clear tokens locally as a fallback
+                const projectRef = 'lnhwazoamudessdhhvsj';
+                localStorage.removeItem(`sb-${projectRef}-auth-token`);
+                this.session = null;
+                this.user = null;
+                this.isAdmin = false;
+                window.location.href = 'index.html';
+            }
         }
     });
 });
@@ -465,11 +479,20 @@ function dashboardApp() {
             // Watch auth user change to refetch (e.g. after login/logout)
             // This fixes the issue where the list doesn't update if auth happens LATE (after timeout)
             // or if the user logs in via modal.
+            let lastUserId = undefined;
             Alpine.effect(() => {
                 const u = Alpine.store('auth').user; // Dependency
-                // debounce or simple check to avoid double-fetch on init
-                // We rely on the initial fetch above for the first load. 
-                // This effect will run on changes. 
+                const currentId = u ? u.id : null;
+
+                if (lastUserId !== undefined && lastUserId !== currentId) {
+                    // Only trigger fetch if the actual user ID changed (e.g. logged in or logged out)
+                    // and wait for auth store to finish loading first to avoid race conditions
+                    if (!Alpine.store('auth').loading) {
+                        this.debouncedFetch();
+                        this.fetchStats(); // RE-FETCH STATS AFTER AUTH CHANGES
+                    }
+                }
+                lastUserId = currentId;
             });
         },
 
@@ -607,12 +630,10 @@ function dashboardApp() {
                 if (error) throw error;
                 this.stats = data;
 
-                // Update Helper Counts for UI (Optional, if we want badges on filters)
-                // This is a trade-off: Server stats are global, not filtered. 
-                // We'll map them to the UI logic.
-                // For now, we update charts.
-                if (window.renderDashboardCharts) {
-                    window.renderDashboardCharts(null, this.stats); // Pass stats directly
+                // Only render if currently viewing the stats tab. 
+                // If on browse tab, updateCharts() handles rendering when they switch.
+                if (window.renderDashboardCharts && this.currentTab === 'stats') {
+                    setTimeout(() => window.renderDashboardCharts(null, this.stats), 50);
                 }
 
             } catch (err) {
@@ -688,8 +709,14 @@ function dashboardApp() {
         },
 
         updateCharts() {
-            // If stats already loaded, render. Else it waits for fetchStats.
-            if (this.stats) renderDashboardCharts(null, this.stats);
+            // Wait for Alpine to finish making the x-show element visible
+            if (this.stats) {
+                setTimeout(() => {
+                    renderDashboardCharts(null, this.stats);
+                }, 50);
+            } else {
+                this.fetchStats();
+            }
         },
 
         // Proxy for filteredModels used in HTML (mapped to current page models)

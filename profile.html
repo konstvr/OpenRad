@@ -71,7 +71,8 @@
 
                 <div class="h-6 w-px bg-slate-300 dark:bg-slate-700 mx-2"></div>
 
-                <button @click="logout()" class="text-xs font-bold text-red-500 hover:underline">Log Out</button>
+                <button @click="$store.auth.logout()" class="text-xs font-bold text-red-500 hover:underline">Log
+                    Out</button>
             </div>
         </div>
 
@@ -802,11 +803,6 @@
                         }
                     }
                 },
-
-                async logout() {
-                    await sbClient.auth.signOut();
-                    window.location.href = 'index.html';
-                }
             }
         }
     </script>
