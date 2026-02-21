@@ -70,6 +70,8 @@
 
                     <template x-if="$store.auth.user">
                         <div class="flex items-center gap-3">
+                            <span class="text-sm font-medium text-slate-500 dark:text-slate-400 hidden sm:inline-block"
+                                x-text="$store.auth.user.email"></span>
                             <a href="profile.html"
                                 class="flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg transition">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

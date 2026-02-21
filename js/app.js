@@ -249,11 +249,12 @@ document.addEventListener('alpine:init', () => {
         },
 
         async updateAdminStatus() {
-            this.isAdmin = false;
-            // Admin checks might fail if RLS requires proper auth, 
-            // but the secondary client has the token so it should work.
+            if (!this.user) {
+                this.isAdmin = false;
+                return;
+            }
 
-            if (this.user) {
+            try {
                 let data, error;
                 if (window.safeFetch && this.useRawFetch) {
                     // Manual select: /rest/v1/user_roles?select=role&id=eq.USER_ID&limit=1
@@ -276,27 +277,48 @@ document.addEventListener('alpine:init', () => {
                     error = res.error;
                 }
 
+                if (error) {
+                    console.warn("[Auth] Failed to update admin status, preserving current state:", error);
+                    return;
+                }
+
                 const roleData = data;
 
                 if (roleData && roleData.role === 'admin') {
                     this.isAdmin = true;
+                } else {
+                    this.isAdmin = false;
                 }
+            } catch (err) {
+                console.warn("[Auth] Exception in updateAdminStatus, preserving current state:", err);
             }
         },
 
         // [NEW] Fetch User Likes
         async fetchUserLikes() {
-            this.userLikes = new Set();
-            if (this.user) {
+            if (!this.user) {
+                this.userLikes = new Set();
+                return;
+            }
+
+            try {
                 const clientToUse = window.sbRpcClient || sbClient;
-                const { data } = await clientToUse
+                const { data, error } = await clientToUse
                     .from('model_likes')
                     .select('model_id')
                     .eq('user_id', this.user.id);
 
+                if (error) {
+                    console.warn("[Auth] Failed to fetch user likes, preserving current state:", error);
+                    return;
+                }
+
                 if (data) {
+                    this.userLikes = new Set();
                     data.forEach(row => this.userLikes.add(row.model_id));
                 }
+            } catch (err) {
+                console.warn("[Auth] Exception in fetchUserLikes, preserving current state:", err);
             }
         },
 
