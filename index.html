@@ -239,7 +239,7 @@
                             <div class="flex items-center gap-4">
                                 <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide">Results</h2>
                                 <span class="text-xs font-bold bg-violet-100 text-violet-700 px-2 py-1 rounded-full"
-                                    x-text="'Showing ' + filteredModels.length + ' / ' + totalModels + ' Models'">
+                                    x-text="'Showing ' + filteredModels.length + ' / ' + (totalModels >= 500 ? (Math.floor(totalModels / 500) * 500) + '+' : totalModels) + ' Models'">
                                 </span>
                             </div>
                         </div>
