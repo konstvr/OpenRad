@@ -645,7 +645,7 @@ function dashboardApp() {
 
         // --- NAVIGATION ---
         goToDetails(id) {
-            window.location.href = `details.html?id=${id}`;
+            window.open(`details.html?id=${id}`, '_blank');
         },
 
         updateCharts() {

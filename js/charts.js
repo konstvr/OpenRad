@@ -75,7 +75,19 @@ function drawChart(id, type, labels, countFn, displayLabels, directData = null) 
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { position: type === 'bar' ? 'none' : 'right' } }
+            plugins: { legend: { position: type === 'bar' ? 'none' : 'right' } },
+            ...(type === 'bar' ? {
+                scales: {
+                    x: {
+                        display: true,
+                        ticks: {
+                            autoSkip: false,
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                }
+            } : {})
         }
     });
 }
