@@ -73,8 +73,18 @@ document.addEventListener('alpine:init', () => {
             if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
 
             // Auth check
-            const { data: { session } } = await sbClient.auth.getSession();
-            this.user = session?.user;
+            const authStore = Alpine.store('auth');
+            if (authStore) {
+                let safety = 0;
+                while (authStore.loading && safety < 400) {
+                    await new Promise(r => setTimeout(r, 50));
+                    safety++;
+                }
+                this.user = authStore.user;
+            } else {
+                const { data } = await sbClient.auth.getSession();
+                this.user = data?.session?.user;
+            }
 
             if (!this.user) {
                 // Redirect to home if not logged in

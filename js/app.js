@@ -217,11 +217,28 @@ document.addEventListener('alpine:init', () => {
 
             sbClient.auth.onAuthStateChange(async (event, session) => {
                 console.log(`[Auth] onAuthStateChange event: ${event}`, session?.user?.id);
-                this.session = session;
-                this.user = session?.user || null;
-                if (session) window.sbRpcClient = sbClient; // Re-sync if official client recovers
 
-                if (event === 'SIGNED_OUT') {
+                if (session) {
+                    this.session = session;
+                    this.user = session.user;
+                    window.sbRpcClient = sbClient; // Re-sync if official client recovers
+                    this.useRawFetch = false;      // Turn off fallback
+                } else {
+                    // Spurious SIGNED_OUT check
+                    const projectRef = 'lnhwazoamudessdhhvsj';
+                    const key = `sb-${projectRef}-auth-token`;
+                    const raw = localStorage.getItem(key);
+
+                    if (raw && (event === 'SIGNED_OUT' || event === 'INITIAL_SESSION')) {
+                        console.warn("[Auth] False null session detected (storage still has token). Ignoring to prevent lock-out.");
+                        return; // Keep existing session (likely the raw fetched one)
+                    }
+
+                    this.session = null;
+                    this.user = null;
+                }
+
+                if (event === 'SIGNED_OUT' && !this.user) {
                     console.log("[Auth] User explicitly signed out or session expired.");
                 }
                 await this.updateAdminStatus();

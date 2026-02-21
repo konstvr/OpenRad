@@ -413,8 +413,19 @@
 
                 async init() {
                     if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
-                    const { data: { session } } = await sbClient.auth.getSession();
-                    this.user = session?.user;
+
+                    const authStore = Alpine.store('auth');
+                    if (authStore) {
+                        let safety = 0;
+                        while (authStore.loading && safety < 400) {
+                            await new Promise(r => setTimeout(r, 50));
+                            safety++;
+                        }
+                        this.user = authStore.user;
+                    } else {
+                        const { data } = await sbClient.auth.getSession();
+                        this.user = data?.session?.user;
+                    }
 
                     if (!this.user) {
                         window.location.href = 'index.html';
@@ -457,13 +468,24 @@
 
                 async loadProfileData() {
                     // Fetch Active Task (Limit 1, so * is okay, but explicit is better)
-                    const { data: active } = await sbClient
-                        .from('models')
-                        .select('id, card_data, is_verified, assigned_to')
-                        .eq('assigned_to', this.user.id)
-                        .eq('is_verified', false)
-                        .limit(1);
-                    this.activeTask = active && active.length > 0 ? active[0] : null;
+                    try {
+                        let active = null;
+                        if (window.safeFetch && Alpine.store('auth')?.useRawFetch) {
+                            const res = await window.safeFetch(`/rest/v1/models?assigned_to=eq.${this.user.id}&is_verified=eq.false&select=id,card_data,is_verified,assigned_to&limit=1`);
+                            active = res.data;
+                        } else {
+                            const res = await sbClient
+                                .from('models')
+                                .select('id, card_data, is_verified, assigned_to')
+                                .eq('assigned_to', this.user.id)
+                                .eq('is_verified', false)
+                                .limit(1);
+                            active = res.data;
+                        }
+                        this.activeTask = active && active.length > 0 ? active[0] : null;
+                    } catch (e) {
+                        console.error("Error fetching active task:", e);
+                    }
 
                     // Fetch History - Initial Load (Page 0)
                     this.historyPage = 0;
@@ -472,29 +494,72 @@
                     await this.loadMoreHistory();
 
                     // Stats: Edits count
-                    const { count } = await sbClient.from('model_edits').select('*', { count: 'exact', head: true }).eq('user_id', this.user.id);
-                    this.stats.edits = count || 0;
+                    let editsCount = 0;
+                    try {
+                        if (window.safeFetch && Alpine.store('auth')?.useRawFetch) {
+                            const countRes = await window.safeFetch(`/rest/v1/model_edits?user_id=eq.${this.user.id}&select=id`);
+                            editsCount = countRes.data ? countRes.data.length : 0;
+                        } else {
+                            const { count } = await sbClient.from('model_edits').select('*', { count: 'exact', head: true }).eq('user_id', this.user.id);
+                            editsCount = count || 0;
+                        }
+                    } catch (e) {
+                        console.error("Error fetching edits count:", e);
+                    }
+                    this.stats.edits = editsCount;
 
                     // Stats: Total Verified (Separate count query since we don't load all rows now)
-                    const { count: verifiedCount } = await sbClient
-                        .from('models')
-                        .select('id', { count: 'exact', head: true })
-                        .eq('verified_by', this.user.id)
-                        .eq('is_verified', true);
-                    this.stats.verified = verifiedCount || 0;
+                    let verifiedCount = 0;
+                    try {
+                        if (window.safeFetch && Alpine.store('auth')?.useRawFetch) {
+                            const countRes = await window.safeFetch(`/rest/v1/models?verified_by=eq.${this.user.id}&is_verified=eq.true&select=id`);
+                            verifiedCount = countRes.data ? countRes.data.length : 0;
+                        } else {
+                            const { count } = await sbClient
+                                .from('models')
+                                .select('id', { count: 'exact', head: true })
+                                .eq('verified_by', this.user.id)
+                                .eq('is_verified', true);
+                            verifiedCount = count || 0;
+                        }
+                    } catch (e) {
+                        console.error("Error fetching verified count:", e);
+                    }
+                    this.stats.verified = verifiedCount;
                 },
 
                 async fetchLiked() {
                     if (!this.user) return;
                     this.loadingLikes = true;
                     try {
-                        const { data } = await sbClient.rpc('get_model_previews', {
-                            p_page: 1,
-                            p_page_size: 6,
-                            p_filters: {},
-                            p_sort: 'date',
-                            p_liked_by_user: this.user.id
-                        });
+                        let data, error;
+
+                        if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                            const res = await window.safeFetch('/rest/v1/rpc/get_model_previews', {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    p_page: 1,
+                                    p_page_size: 6,
+                                    p_filters: {},
+                                    p_sort: 'date',
+                                    p_liked_by_user: this.user.id
+                                })
+                            });
+                            data = res.data;
+                            error = res.error;
+                        } else {
+                            const res = await sbClient.rpc('get_model_previews', {
+                                p_page: 1,
+                                p_page_size: 6,
+                                p_filters: {},
+                                p_sort: 'date',
+                                p_liked_by_user: this.user.id
+                            });
+                            data = res.data;
+                            error = res.error;
+                        }
+
+                        if (error) throw error;
 
                         // Parse JSONB if needed (similar to history)
                         if (data && data.length > 0) {
@@ -520,23 +585,26 @@
                         const from = this.historyPage * this.historyPageSize;
                         const to = from + this.historyPageSize - 1;
 
-                        // Optimized Query: Select specific fields only
-                        // Note: card_data->Model->Name requires specific syntax or just fetching card_data
-                        // Supabase JS doesn't support arrow selector in .select() easily for return values without alias or view/RPC usually.
-                        // However, we can fetch `card_data` but we know it's a JSONB column. 
-                        // To be safe and compatible, we fetch card_data but we rely on PostgREST to be efficient? No, it sends full JSON.
-                        // OPTIMIZATION: We CAN'T easily select partial JSON with standard JS client without SQL function 
-                        // UNLESS we accept fetching full card_data for these 10 items. 
-                        // 10 items of full JSON is much better than ALL items.
+                        let data, error;
 
-                        const { data, error } = await sbClient
-                            .from('models')
-                            // .select('id, verification_date, is_verified, verified_by, card_data->Model->Name') // Not standard JS syntax
-                            .select('id, card_data, verification_date, verified_by, is_verified')
-                            .eq('verified_by', this.user.id)
-                            .eq('is_verified', true)
-                            .order('verification_date', { ascending: false })
-                            .range(from, to);
+                        if (window.safeFetch && Alpine.store('auth').useRawFetch) {
+                            const q = `?select=id,card_data,verification_date,verified_by,is_verified&verified_by=eq.${this.user.id}&is_verified=eq.true&order=verification_date.desc&limit=${this.historyPageSize}&offset=${from}`;
+                            const res = await window.safeFetch(`/rest/v1/models${q}`, {
+                                headers: { 'Prefer': 'return=representation' }
+                            });
+                            data = res.data;
+                            error = res.error;
+                        } else {
+                            const res = await sbClient
+                                .from('models')
+                                .select('id, card_data, verification_date, verified_by, is_verified')
+                                .eq('verified_by', this.user.id)
+                                .eq('is_verified', true)
+                                .order('verification_date', { ascending: false })
+                                .range(from, to);
+                            data = res.data;
+                            error = res.error;
+                        }
 
                         if (error) throw error;
 
@@ -560,7 +628,11 @@
 
                     } catch (err) {
                         console.error("Error loading history:", err);
-                        alert("Error loading history: " + err.message);
+                        // Do NOT alert the user if it's a lock timeout, just console log it
+                        const errString = String(err.message || err);
+                        if (!errString.includes('LockManager') && !errString.includes('AuthLockTimeout')) {
+                            alert("Error loading history: " + err.message);
+                        }
                     } finally {
                         this.historyLoading = false;
                     }
@@ -628,17 +700,37 @@
                 },*/
 
                 async getNewMission() {
-                    const { data, error } = await sbClient.rpc('claim_next_task', { user_id: this.user.id });
-                    if (error) {
-                        alert("Error claiming task: " + error.message);
-                        return;
-                    }
+                    let data, error;
+                    try {
+                        if (window.safeFetch && Alpine.store('auth')?.useRawFetch) {
+                            const res = await window.safeFetch('/rest/v1/rpc/claim_next_task', {
+                                method: 'POST',
+                                body: JSON.stringify({ user_id: this.user.id })
+                            });
+                            data = res.data;
+                            error = res.error;
+                        } else {
+                            const res = await sbClient.rpc('claim_next_task', { user_id: this.user.id });
+                            data = res.data;
+                            error = res.error;
+                        }
 
-                    // FIX: Check for array length
-                    if (data && data.length > 0) {
-                        this.activeTask = data[0];
-                    } else {
-                        alert("No unverified models available right now! Great job clearing the queue!");
+                        if (error) {
+                            throw error;
+                        }
+
+                        // FIX: Check for array length
+                        if (data && data.length > 0) {
+                            this.activeTask = data[0];
+                        } else {
+                            alert("No unverified models available right now! Great job clearing the queue!");
+                        }
+                    } catch (err) {
+                        console.error('Error claiming task:', err);
+                        const errStr = String(err.message || err);
+                        if (!errStr.includes("LockManager") && !errStr.includes("AuthLockTimeout")) {
+                            alert("Error claiming task: " + errStr);
+                        }
                     }
                 },
 
@@ -656,19 +748,40 @@
 
                     try {
                         // 1. Release the current card
-                        const { error: releaseError } = await sbClient
-                            .from('models')
-                            .update({ assigned_to: null })
-                            .eq('id', skippedId);
+                        let releaseError;
+                        if (window.safeFetch && Alpine.store('auth')?.useRawFetch) {
+                            const res = await window.safeFetch(`/rest/v1/models?id=eq.${skippedId}`, {
+                                method: 'PATCH',
+                                body: JSON.stringify({ assigned_to: null })
+                            });
+                            releaseError = res.error;
+                        } else {
+                            const res = await sbClient
+                                .from('models')
+                                .update({ assigned_to: null })
+                                .eq('id', skippedId);
+                            releaseError = res.error;
+                        }
 
                         if (releaseError) throw releaseError;
 
                         // 2. Claim the NEXT card
-                        // Note: The RPC returns an ARRAY (SETOF models)
-                        const { data, error: claimError } = await sbClient.rpc('claim_next_task', {
-                            user_id: this.user.id,
-                            exclude_id: skippedId
-                        });
+                        let data, claimError;
+                        if (window.safeFetch && Alpine.store('auth')?.useRawFetch) {
+                            const res = await window.safeFetch('/rest/v1/rpc/claim_next_task', {
+                                method: 'POST',
+                                body: JSON.stringify({ user_id: this.user.id, exclude_id: skippedId })
+                            });
+                            data = res.data;
+                            claimError = res.error;
+                        } else {
+                            const res = await sbClient.rpc('claim_next_task', {
+                                user_id: this.user.id,
+                                exclude_id: skippedId
+                            });
+                            data = res.data;
+                            claimError = res.error;
+                        }
 
                         if (claimError) throw claimError;
 
@@ -682,8 +795,11 @@
                         }
 
                     } catch (err) {
-                        console.error(err);
-                        alert("Error skipping task: " + err.message);
+                        console.error('Error skipping task:', err);
+                        const errStr = String(err.message || err);
+                        if (!errStr.includes("LockManager") && !errStr.includes("AuthLockTimeout")) {
+                            alert("Error skipping task: " + err.message);
+                        }
                     }
                 },
 
