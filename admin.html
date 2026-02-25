@@ -822,10 +822,20 @@
                         // We need to fetch model names because allModels is no longer full
                         if (this.flaggedModels.length > 0) {
                             const ids = [...new Set(this.flaggedModels.map(f => f.model_id))];
-                            const { data: models } = await sbClient
-                                .from('models')
-                                .select('id, card_data')
-                                .in('id', ids);
+
+                            let models = [];
+                            const chunkSize = 400;
+                            for (let i = 0; i < ids.length; i += chunkSize) {
+                                const chunk = ids.slice(i, i + chunkSize);
+                                const { data: chunkModels } = await sbClient
+                                    .from('models')
+                                    .select('id, card_data')
+                                    .in('id', chunk);
+
+                                if (chunkModels) {
+                                    models.push(...chunkModels);
+                                }
+                            }
 
                             const modelMap = {};
                             models?.forEach(m => {
