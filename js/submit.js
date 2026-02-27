@@ -292,23 +292,48 @@ document.addEventListener('alpine:init', () => {
                 };
 
                 let error;
+                const authStore = Alpine.store('auth');
+                const useRawFetch = window.safeFetch && authStore && authStore.useRawFetch;
+
                 if (this.submissionId) {
                     // Update Mode
-                    const { error: updateError } = await sbClient
-                        .from('model_submissions')
-                        .update({ card_data: cardData })
-                        .eq('id', this.submissionId);
-                    error = updateError;
+                    if (useRawFetch) {
+                        const res = await window.safeFetch(`/rest/v1/model_submissions?id=eq.${this.submissionId}`, {
+                            method: 'PATCH',
+                            body: JSON.stringify({ card_data: cardData }),
+                            headers: { 'Prefer': 'return=minimal' }
+                        });
+                        error = res.error;
+                    } else {
+                        const { error: updateError } = await sbClient
+                            .from('model_submissions')
+                            .update({ card_data: cardData })
+                            .eq('id', this.submissionId);
+                        error = updateError;
+                    }
                 } else {
                     // Create Mode
-                    const { error: insertError } = await sbClient
-                        .from('model_submissions')
-                        .insert({
-                            user_id: this.user.id,
-                            card_data: cardData,
-                            status: 'pending' // Enforced by RLS anyway
+                    if (useRawFetch) {
+                        const res = await window.safeFetch('/rest/v1/model_submissions', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                user_id: this.user.id,
+                                card_data: cardData,
+                                status: 'pending' // Enforced by RLS anyway
+                            }),
+                            headers: { 'Prefer': 'return=minimal' }
                         });
-                    error = insertError;
+                        error = res.error;
+                    } else {
+                        const { error: insertError } = await sbClient
+                            .from('model_submissions')
+                            .insert({
+                                user_id: this.user.id,
+                                card_data: cardData,
+                                status: 'pending' // Enforced by RLS anyway
+                            });
+                        error = insertError;
+                    }
                 }
 
                 if (error) throw error;
