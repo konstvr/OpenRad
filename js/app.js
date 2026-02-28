@@ -9,7 +9,7 @@ const SUPABASE_KEY = 'sb_publishable_uzQs9fk-6ZTeu4RSJ3wHgw_1KMskJ9-';
 const _urlParams = new URLSearchParams(window.location.search);
 const _isHandoff = _urlParams.has('at');
 
-const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, _isHandoff ? {
+var sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, _isHandoff ? {
     auth: {
         storage: window.sessionStorage, // Isolate storage backend
         storageKey: 'sb-handoff-isolated', // Isolate lock names (Critical for concurrency)
@@ -146,13 +146,26 @@ document.addEventListener('alpine:init', () => {
                                         this.session = session;
                                         this.user = session.user;
 
-                                        // 2. Headless Safe Fetch (Bypasses Lock by using raw HTTP)
-                                        console.log("[Auth] Switching to Raw Fetch mode with recovered token...");
+                                        console.log("[Auth] Recreating sbClient to bypass LocalStorage locks...");
 
-                                        this.useRawFetch = true; // Flag to use raw fetch
-                                        this.recoveredToken = session.access_token;
+                                        // Create a fresh client with memory storage
+                                        sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                                            auth: {
+                                                persistSession: false,
+                                                autoRefreshToken: false,
+                                                detectSessionInUrl: false
+                                            }
+                                        });
+                                        // Set the recovered session into the new client
+                                        await sbClient.auth.setSession({
+                                            access_token: session.access_token,
+                                            refresh_token: session.refresh_token || ''
+                                        });
 
-                                        // Helper for Raw Fetch
+                                        window.sbRpcClient = sbClient;
+                                        this.useRawFetch = false; // We can use the real client now!
+
+                                        // Fallback legacy safeFetch just in case
                                         window.safeFetch = async (endpoint, options = {}) => {
                                             const url = `${SUPABASE_URL}${endpoint}`;
                                             const headers = {

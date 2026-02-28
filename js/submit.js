@@ -293,46 +293,107 @@ document.addEventListener('alpine:init', () => {
 
                 let error;
                 const authStore = Alpine.store('auth');
-                const useRawFetch = window.safeFetch && authStore && authStore.useRawFetch;
 
-                if (this.submissionId) {
-                    // Update Mode
-                    if (useRawFetch) {
-                        const res = await window.safeFetch(`/rest/v1/model_submissions?id=eq.${this.submissionId}`, {
+                // Helper: Safe raw fetch with timeout (always try this first as it's more reliable)
+                const safeRawFetch = async (endpoint, options = {}) => {
+                    const SUPABASE_URL = 'https://lnhwazoamudessdhhvsj.supabase.co';
+                    const SUPABASE_KEY = 'sb_publishable_uzQs9fk-6ZTeu4RSJ3wHgw_1KMskJ9-';
+
+                    // Get token from session or recovered token
+                    const token = (authStore?.session?.access_token) || authStore?.recoveredToken;
+                    if (!token) {
+                        throw new Error("No authentication token available. Please log in again.");
+                    }
+
+                    const url = `${SUPABASE_URL}${endpoint}`;
+                    const headers = {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    };
+
+                    console.log(`[Submit] Raw fetch ${options.method || 'GET'} ${url}`);
+
+                    // Race the fetch against a timeout to prevent hanging
+                    const fetchPromise = fetch(url, { ...options, headers });
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error("FetchTimeout")), 5000)
+                    );
+
+                    const res = await Promise.race([fetchPromise, timeoutPromise]);
+
+                    // Handle Void responses
+                    if (res.status === 204) return { data: null, error: null };
+
+                    // Handle JSON
+                    const isJson = res.headers.get('content-type')?.includes('application/json');
+                    if (isJson) {
+                        const json = await res.json();
+                        if (!res.ok) return { data: null, error: json };
+                        return { data: json, error: null };
+                    }
+
+                    if (!res.ok) return { data: null, error: { message: res.statusText } };
+                    return { data: null, error: null };
+                };
+
+                // Try raw fetch first (more reliable), fall back to sbClient with timeout
+                try {
+                    if (this.submissionId) {
+                        // Update Mode - try raw fetch first
+                        console.log("[Submit] Attempting update with raw fetch...");
+                        const res = await safeRawFetch(`/rest/v1/model_submissions?id=eq.${this.submissionId}`, {
                             method: 'PATCH',
                             body: JSON.stringify({ card_data: cardData }),
                             headers: { 'Prefer': 'return=minimal' }
                         });
                         error = res.error;
                     } else {
-                        const { error: updateError } = await sbClient
-                            .from('model_submissions')
-                            .update({ card_data: cardData })
-                            .eq('id', this.submissionId);
-                        error = updateError;
-                    }
-                } else {
-                    // Create Mode
-                    if (useRawFetch) {
-                        const res = await window.safeFetch('/rest/v1/model_submissions', {
+                        // Create Mode - try raw fetch first
+                        console.log("[Submit] Attempting create with raw fetch...");
+                        const res = await safeRawFetch('/rest/v1/model_submissions', {
                             method: 'POST',
                             body: JSON.stringify({
                                 user_id: this.user.id,
                                 card_data: cardData,
-                                status: 'pending' // Enforced by RLS anyway
+                                status: 'pending'
                             }),
                             headers: { 'Prefer': 'return=minimal' }
                         });
                         error = res.error;
-                    } else {
-                        const { error: insertError } = await sbClient
-                            .from('model_submissions')
-                            .insert({
-                                user_id: this.user.id,
-                                card_data: cardData,
-                                status: 'pending' // Enforced by RLS anyway
-                            });
-                        error = insertError;
+                    }
+                } catch (fetchErr) {
+                    // Raw fetch failed, try sbClient with timeout as fallback
+                    console.warn("[Submit] Raw fetch failed, falling back to sbClient:", fetchErr);
+
+                    const withTimeout = (promise, timeoutMs) => Promise.race([
+                        promise,
+                        new Promise((_, reject) => setTimeout(() => reject(new Error("Supabase operation timed out")), timeoutMs))
+                    ]);
+
+                    try {
+                        if (this.submissionId) {
+                            const result = await withTimeout(
+                                sbClient.from('model_submissions').update({ card_data: cardData }).eq('id', this.submissionId),
+                                5000
+                            );
+                            error = result.error;
+                        } else {
+                            const result = await withTimeout(
+                                sbClient.from('model_submissions').insert({
+                                    user_id: this.user.id,
+                                    card_data: cardData,
+                                    status: 'pending'
+                                }),
+                                5000
+                            );
+                            error = result.error;
+                        }
+                    } catch (timeoutErr) {
+                        // If both failed, throw the original fetch error
+                        console.error("[Submit] Both methods failed");
+                        throw fetchErr;
                     }
                 }
 
