@@ -281,6 +281,16 @@
                             Flagged Models Queue
                         </h2>
                         <div class="flex items-center gap-2">
+                            <button @click="deleteAllFlags()"
+                                title="Delete all flagged models matching the current filter"
+                                class="text-xs px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-bold flex items-center gap-1 transition">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                    </path>
+                                </svg>
+                                Delete All
+                            </button>
                             <button @click="syncFlags()"
                                 title="Fix inconsistencies where models are stuck as flagged but have no flags"
                                 class="text-xs px-3 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-300 transition font-bold flex items-center gap-1">
@@ -385,6 +395,21 @@
                                 </template>
                             </select>
                             <span class="text-sm text-slate-500" x-text="getFilteredTrash().length + ' items'"></span>
+                        </div>
+                    </div>
+
+                    <div
+                        class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-white mb-2">Trash Statistics (Total: <span
+                                x-text="trash.length"></span>)</h3>
+                        <div class="flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                            <template x-for="stat in getTrashStats()" :key="stat.label">
+                                <div class="flex items-center gap-1">
+                                    <span class="font-bold text-slate-500" x-text="stat.label + ':'"></span>
+                                    <span class="text-slate-700 dark:text-slate-300 font-mono"
+                                        x-text="stat.count + ' (' + stat.percentage + '%)'"></span>
+                                </div>
+                            </template>
                         </div>
                     </div>
 
@@ -841,12 +866,16 @@
                             models?.forEach(m => {
                                 let cd = m.card_data;
                                 if (typeof cd === 'string') try { cd = JSON.parse(cd); } catch (e) { }
-                                modelMap[m.id] = cd?.Model?.Name || 'Unknown Model';
+                                modelMap[m.id] = {
+                                    Name: cd?.Model?.Name || 'Unknown Model',
+                                    _deleted: cd?._deleted || false
+                                };
                             });
 
                             this.flaggedModels = this.flaggedModels.map(f => ({
                                 ...f,
-                                modelName: modelMap[f.model_id] || 'Unknown Model'
+                                modelName: modelMap[f.model_id]?.Name || 'Unknown Model',
+                                _deleted: modelMap[f.model_id]?._deleted || false
                             }));
                         }
                     } catch (err) {
@@ -926,9 +955,7 @@
 
                         delete newData._deleted_at;
                         const { error } = await sbClient.from('models').update({
-                            card_data: newData,
-                            is_flagged: false,
-                            flag_reason: null
+                            card_data: newData
                         }).eq('id', model.id);
                         if (error) throw error;
 
@@ -944,8 +971,8 @@
                     }
                 },
 
-                async deleteModel(flag) {
-                    if (!confirm("CONFIRM DELETION:\nThis will hide the model from the public site immediately.\n(Soft Delete)")) return;
+                async deleteModel(flag, skipConfirm = false, skipRefresh = false) {
+                    if (!skipConfirm && !confirm("CONFIRM DELETION:\nThis will hide the model from the public site immediately.\n(Soft Delete)")) return false;
 
                     try {
                         // Fetch model first since allModels is empty
@@ -961,35 +988,39 @@
                         if (typeof updatedCard === 'string') updatedCard = JSON.parse(updatedCard);
                         updatedCard = JSON.parse(JSON.stringify(updatedCard)); // Deep copy
 
+                        let deleteReason = 'Unsorted';
+                        try {
+                            deleteReason = JSON.parse(flag.new_value).reason || 'Unsorted';
+                        } catch (e) { }
+
                         updatedCard._deleted = true;
                         updatedCard._deleted_at = new Date();
+                        updatedCard._deleted_reason = deleteReason;
 
                         const { error: updateError } = await sbClient
                             .from('models')
                             .update({
                                 card_data: updatedCard,
                                 is_verified: false,
-                                verified_by: null,
-                                verification_date: null,
-                                is_flagged: false,
-                                flag_reason: null
+                                verification_date: null
                             })
                             .eq('id', flag.model_id);
 
                         if (updateError) throw updateError;
 
-                        // Delete the flag
-                        await sbClient.from('model_edits').delete().eq('id', flag.id);
-
-                        alert("Model deleted (hidden).");
+                        if (!skipConfirm) alert("Model deleted (hidden).");
 
                         // Refresh views
-                        this.loadTrash();
-                        // this.loadEdits(); // Might be expensive
-                        await this.loadFlags();
+                        if (!skipRefresh) {
+                            this.loadTrash();
+                            // this.loadEdits(); // Might be expensive
+                            await this.loadFlags();
+                        }
+                        return true;
                     } catch (err) {
                         console.error(err);
                         alert("Error deleting: " + err.message);
+                        return false;
                     }
                 },
 
@@ -1291,8 +1322,9 @@
                 },
 
                 getFilteredFlags() {
-                    if (this.flagFilter === 'All') return this.flaggedModels;
-                    return this.flaggedModels.filter(flag => {
+                    const activeFlags = this.flaggedModels.filter(f => !f._deleted);
+                    if (this.flagFilter === 'All') return activeFlags;
+                    return activeFlags.filter(flag => {
                         try {
                             const reason = JSON.parse(flag.new_value).reason;
                             if (this.flagFilter === 'Unsorted') {
@@ -1306,11 +1338,60 @@
                 getFilteredTrash() {
                     if (this.trashFilter === 'All') return this.trash;
                     return this.trash.filter(model => {
+                        let reason = model.card_data?._deleted_reason || model.flag_reason || 'Unsorted';
                         if (this.trashFilter === 'Unsorted') {
-                            return !model.flag_reason || !this.standardCategories.includes(model.flag_reason);
+                            return !this.standardCategories.includes(reason);
                         }
-                        return model.flag_reason === this.trashFilter;
+                        return reason === this.trashFilter;
                     });
+                },
+
+                getTrashStats() {
+                    const total = this.trash.length;
+                    if (total === 0) return [];
+                    const counts = {};
+                    this.trash.forEach(m => {
+                        let reason = m.card_data?._deleted_reason || m.flag_reason || 'Unsorted';
+                        if (!this.standardCategories.includes(reason)) {
+                            reason = 'Unsorted';
+                        }
+                        counts[reason] = (counts[reason] || 0) + 1;
+                    });
+
+                    const stats = Object.keys(counts).map(reason => {
+                        return {
+                            label: reason,
+                            count: counts[reason],
+                            percentage: Math.round((counts[reason] / total) * 100)
+                        };
+                    });
+
+                    return stats.sort((a, b) => b.count - a.count);
+                },
+
+                async deleteAllFlags() {
+                    const flags = this.getFilteredFlags();
+                    if (flags.length === 0) {
+                        alert("No configured flags matching this filter to delete.");
+                        return;
+                    }
+                    if (!confirm(`CONFIRM DELETION:\nThis will delete ${flags.length} flagged model(s) matching the current filter. Proceed?`)) return;
+
+                    this.loading = true;
+                    try {
+                        let deleted = 0;
+                        for (let flag of flags) {
+                            const success = await this.deleteModel(flag, true, true);
+                            if (success) deleted++;
+                        }
+                        alert(`Successfully deleted ${deleted} model(s).`);
+                        this.loadTrash();
+                        await this.loadFlags();
+                    } catch (e) {
+                        alert("Error during bulk delete: " + e.message);
+                    } finally {
+                        this.loading = false;
+                    }
                 },
 
                 async loadSubmissions() {
@@ -1434,16 +1515,25 @@
             }
         }
     </script>
-    <footer class="w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 mt-12 py-6 transition-colors duration-300">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
+    <footer
+        class="w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 mt-12 py-6 transition-colors duration-300">
+        <div
+            class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <div class="text-sm text-slate-500 dark:text-slate-400 text-center md:text-left">
-                <p class="font-medium text-slate-700 dark:text-slate-300">Developed by <a href="https://scholar.google.com/citations?hl=en&amp;user=aoPG8hAAAAAJ" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">Konstantinos Vrettos</a></p>
-                <p>&copy; Copyright <a href="https://www.atilab.net/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">ATI Lab</a>, University of Crete 2026</p>
+                <p class="font-medium text-slate-700 dark:text-slate-300">Developed by <a
+                        href="https://scholar.google.com/citations?hl=en&amp;user=aoPG8hAAAAAJ" target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">Konstantinos
+                        Vrettos</a></p>
+                <p>&copy; Copyright <a href="https://www.atilab.net/" target="_blank" rel="noopener noreferrer"
+                        class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">ATI Lab</a>,
+                    University of Crete 2026</p>
             </div>
             <div class="text-xs text-slate-400 dark:text-slate-500 text-center md:text-right max-w-md">
-                When using the repository please cite: 
-                <br class="hidden md:block"/>
-                <span class="italic text-slate-700 dark:text-slate-300">"OpenRad: a Curated Repository of Open-access AI models for Radiology, Vrettos K et al., Under Review, 2026"</span>
+                When using the repository please cite:
+                <br class="hidden md:block" />
+                <span class="italic text-slate-700 dark:text-slate-300">"OpenRad: a Curated Repository of Open-access AI
+                    models for Radiology, Vrettos K et al., Under Review, 2026"</span>
             </div>
         </div>
     </footer>
