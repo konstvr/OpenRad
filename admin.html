@@ -100,6 +100,44 @@
 
         <div x-show="isAdmin" x-cloak>
 
+            <!-- Urgent Review Banner (Admin Only) -->
+            <div
+                class="bg-gradient-to-r from-red-500 to-orange-500 rounded-2xl p-6 shadow-lg text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
+                <div class="absolute inset-0 bg-black/10"></div>
+
+                <div class="relative z-10 flex items-center gap-4">
+                    <div class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold">Paper Review Deadline</h3>
+                        <p class="text-sm text-white/90">Please help clear the queue before the deadline!</p>
+                    </div>
+                </div>
+
+                <div class="relative z-10 flex flex-col md:flex-row gap-6 items-center">
+                    <div class="bg-black/20 rounded-xl px-6 py-3 backdrop-blur-sm text-center min-w-[120px]">
+                        <div class="text-2xl font-bold font-mono" x-text="countdown">00:00:00</div>
+                        <div class="text-xs uppercase tracking-wider font-bold text-white/70 mt-1">Remaining</div>
+                    </div>
+
+                    <div class="bg-white text-red-600 rounded-xl px-6 py-3 shadow-sm text-center min-w-[120px]">
+                        <template x-if="remainingCount === null">
+                            <div
+                                class="w-6 h-6 border-2 border-red-200 border-t-red-600 rounded-full animate-spin mx-auto">
+                            </div>
+                        </template>
+                        <template x-if="remainingCount !== null">
+                            <div class="text-2xl font-bold" x-text="remainingCount">0</div>
+                        </template>
+                        <div class="text-xs uppercase tracking-wider font-bold text-slate-500 mt-1">Unverified</div>
+                    </div>
+                </div>
+            </div>
+
             <div x-show="activeTab === 'edits'" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div
                     class="lg:col-span-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col h-[80vh]">
@@ -623,6 +661,11 @@
                 itemsPerPage: 10,
                 searchInput: '',
 
+                // Banner State
+                countdown: '00:00:00',
+                remainingCount: null,
+                timerInterval: null,
+
                 // Edit Mode State
                 editMode: false,
                 editDraft: null,
@@ -712,6 +755,8 @@
                         await this.loadEdits();
                         await this.loadUsers();
                         await this.loadFlags();
+                        this.startCountdown();
+                        this.fetchRemainingCount();
                     } else {
                         alert("Access Denied: You do not have administrator permissions.");
                         window.location.href = 'index.html';
@@ -1413,6 +1458,92 @@
                     }
                 },
 
+                // Banner Logic
+                startCountdown() {
+                    const updateTimer = () => {
+                        const now = new Date();
+                        const athensTimeStr = new Date().toLocaleString("en-US", { timeZone: "Europe/Athens" });
+                        const athensDate = new Date(athensTimeStr);
+                        const targetAthens = new Date(athensDate);
+                        targetAthens.setHours(22, 0, 0, 0);
+
+                        const diff = targetAthens - athensDate;
+
+                        if (diff <= 0) {
+                            this.countdown = "00:00:00";
+                            if (this.timerInterval) clearInterval(this.timerInterval);
+                            return;
+                        }
+
+                        const hours = Math.floor(diff / (1000 * 60 * 60));
+                        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+                        this.countdown = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                    };
+
+                    updateTimer();
+                    this.timerInterval = setInterval(updateTimer, 1000);
+                },
+
+                async fetchRemainingCount() {
+                    try {
+                        let totalAll = 0;
+                        let totalVerified = 0;
+                        let totalFlagged = 0;
+
+                        if (window.safeFetch && Alpine.store('auth')?.useRawFetch) {
+                            const getCount = async (verifiedOnly) => {
+                                const res = await window.safeFetch('/rest/v1/rpc/get_model_previews', {
+                                    method: 'POST',
+                                    body: JSON.stringify({
+                                        p_page: 1, p_page_size: 1, p_search: '',
+                                        p_filters: { verified: verifiedOnly }, p_sort: 'newest', p_liked_by_user: null
+                                    })
+                                });
+                                return (res.data && res.data.length > 0) ? res.data[0].total_count : 0;
+                            };
+                            totalAll = await getCount(false);
+                            totalVerified = await getCount(true);
+                            // Get Flagged (We need unique models, because some might have multiple flags)
+                            const flagRes = await window.safeFetch(`/rest/v1/models?is_flagged=eq.true&select=id`);
+                            totalFlagged = flagRes.data ? flagRes.data.length : 0;
+                        } else {
+                            const getCount = async (verifiedOnly) => {
+                                const { data, error } = await sbClient.rpc('get_model_previews', {
+                                    p_page: 1, p_page_size: 1, p_search: '',
+                                    p_filters: { verified: verifiedOnly }, p_sort: 'newest', p_liked_by_user: null
+                                });
+                                if (error) throw error;
+                                return (data && data.length > 0) ? data[0].total_count : 0;
+                            };
+                            totalAll = await getCount(false);
+                            totalVerified = await getCount(true);
+
+                            // Get Flagged
+                            // Note: the flags tab uses model_edits WHERE field_path = '__FLAG__' and then maps to models...
+                            // If a model has 3 flags, it appears 3 times in model_edits, leading to 991 flags instead of 965 models.
+                            // But is_flagged=true on 'models' is always exactly 1 per model.
+                            // Since we want unique models that are currently flagged, counting 'models' WHERE 'is_flagged' = true is correct.
+                            const { count: flagCount, error } = await sbClient
+                                .from('models').select('id', { count: 'exact', head: true })
+                                .eq('is_flagged', true);
+                            if (error) throw error;
+                            totalFlagged = flagCount || 0;
+                        }
+
+                        console.log(`[Remaining Count] Total Models: ${totalAll}, Verified: ${totalVerified}, Flagged: ${totalFlagged}`);
+
+
+                        let remaining = totalAll - totalVerified - totalFlagged;
+                        this.remainingCount = remaining > 0 ? remaining : 0;
+
+                    } catch (e) {
+                        console.error("Error fetching remaining count:", e);
+                        this.remainingCount = "?";
+                    }
+                },
+
                 toggleEditSubmission() {
                     if (!this.editMode) {
                         // Enter Edit Mode: Deep copy current submission data
@@ -1515,7 +1646,7 @@
             }
         }
     </script>
-    <footer
+    <footer style="display: none;"
         class="w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 mt-12 py-6 transition-colors duration-300">
         <div
             class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
