@@ -219,7 +219,9 @@ document.addEventListener('alpine:init', () => {
 
                 while (attempts < 3 && !refreshed) {
                     try {
-                        const { data, error } = await sbClient.auth.refreshSession();
+                        const refreshPromise = sbClient.auth.refreshSession();
+                        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("RefreshTimeout")), 2000));
+                        const { data, error } = await Promise.race([refreshPromise, timeoutPromise]);
                         if (error) throw error;
 
                         this.session = data.session;
@@ -689,7 +691,8 @@ document.addEventListener('alpine:init', () => {
                 await this.ensureSession();
             } catch (authErr) {
                 console.error("[Details] Auth verification failed during save:", authErr);
-                alert("Session expired. Please copy your changes and reload the page.");
+                alert("Session expired. Please log in again to save your changes.");
+                Alpine.store('auth').modalOpen = true;
                 return;
             }
 

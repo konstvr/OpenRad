@@ -839,17 +839,49 @@
                 </div>
             </div>
         </div>
+
+        <div x-show="$store.auth.modalOpen"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm" x-cloak
+            @click="$store.auth.modalOpen = false">
+            <div class="relative bg-white dark:bg-slate-800 p-8 rounded-xl shadow-xl w-96 border border-slate-200 dark:border-slate-700"
+                @click.stop>
+                <h3 class="text-xl font-bold mb-4 dark:text-white">Login Required</h3>
+                <div class="mb-3">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
+                    <input type="email" x-model="$store.auth.email" placeholder="name@example.com"
+                        class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Password</label>
+                    <input type="password" x-model="$store.auth.password" placeholder="••••••••"
+                        class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500"
+                        @keyup.enter="$store.auth.handleAuth()">
+                </div>
+                <button @click="$store.auth.handleAuth()"
+                    class="w-full bg-violet-600 text-white py-2 rounded font-bold hover:bg-violet-700 transition mb-4">Log
+                    In</button>
+            </div>
+        </div>
     </div>
-    <footer class="w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 mt-12 py-6 transition-colors duration-300">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
+    <footer
+        class="w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 mt-12 py-6 transition-colors duration-300">
+        <div
+            class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <div class="text-sm text-slate-500 dark:text-slate-400 text-center md:text-left">
-                <p class="font-medium text-slate-700 dark:text-slate-300">Developed by <a href="https://scholar.google.com/citations?hl=en&amp;user=aoPG8hAAAAAJ" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">Konstantinos Vrettos</a></p>
-                <p>&copy; Copyright <a href="https://www.atilab.net/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">ATI Lab</a>, University of Crete 2026</p>
+                <p class="font-medium text-slate-700 dark:text-slate-300">Developed by <a
+                        href="https://scholar.google.com/citations?hl=en&amp;user=aoPG8hAAAAAJ" target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">Konstantinos
+                        Vrettos</a></p>
+                <p>&copy; Copyright <a href="https://www.atilab.net/" target="_blank" rel="noopener noreferrer"
+                        class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">ATI Lab</a>,
+                    University of Crete 2026</p>
             </div>
             <div class="text-xs text-slate-400 dark:text-slate-500 text-center md:text-right max-w-md">
-                When using the repository please cite: 
-                <br class="hidden md:block"/>
-                <span class="italic text-slate-700 dark:text-slate-300">"OpenRad: a Curated Repository of Open-access AI models for Radiology, Vrettos K et al., Under Review, 2026"</span>
+                When using the repository please cite:
+                <br class="hidden md:block" />
+                <span class="italic text-slate-700 dark:text-slate-300">"OpenRad: a Curated Repository of Open-access AI
+                    models for Radiology, Vrettos K et al., Under Review, 2026"</span>
             </div>
         </div>
     </footer>

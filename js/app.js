@@ -251,6 +251,7 @@ document.addEventListener('alpine:init', () => {
                     this.user = session.user;
                     window.sbRpcClient = sbClient; // Re-sync if official client recovers
                     this.useRawFetch = false;      // Turn off fallback
+                    this.modalOpen = false;        // Ensure modal closes on any successful auth event
                 } else {
                     // Spurious SIGNED_OUT check
                     const projectRef = 'lnhwazoamudessdhhvsj';
@@ -398,16 +399,26 @@ document.addEventListener('alpine:init', () => {
         },
 
         async handleAuth() {
-            const { data, error } = await sbClient.auth.signInWithPassword({
-                email: this.email,
-                password: this.password
-            });
+            try {
+                const { data, error } = await sbClient.auth.signInWithPassword({
+                    email: this.email,
+                    password: this.password
+                });
 
-            if (error) {
-                alert("Login Failed: " + error.message);
-            } else {
-                this.modalOpen = false;
-                this.password = '';
+                if (error) {
+                    alert("Login Failed: " + error.message);
+                } else {
+                    this.modalOpen = false;
+                    this.password = '';
+                }
+            } catch (err) {
+                console.warn("[Auth] signInWithPassword exception:", err);
+                if (this.user || this.session) {
+                    this.modalOpen = false;
+                    this.password = '';
+                } else {
+                    alert("Login Error: " + err.message);
+                }
             }
         },
 
