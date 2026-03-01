@@ -9,15 +9,30 @@ const SUPABASE_KEY = 'sb_publishable_uzQs9fk-6ZTeu4RSJ3wHgw_1KMskJ9-';
 const _urlParams = new URLSearchParams(window.location.search);
 const _isHandoff = _urlParams.has('at');
 
+// [NEW] Dummy Lock to bypass Navigator LockManager timeout issues
+const customLock = async (...args) => {
+    // Supabase passes (name, acquire) OR (name, acquireTimeout, acquire)
+    const acquire = args.pop();
+    // Immediately execute the callback instead of waiting for cross-tab locking
+    if (typeof acquire === 'function') {
+        return await acquire();
+    }
+};
+
 var sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, _isHandoff ? {
     auth: {
         storage: window.sessionStorage, // Isolate storage backend
         storageKey: 'sb-handoff-isolated', // Isolate lock names (Critical for concurrency)
         persistSession: true,
         autoRefreshToken: false,
-        detectSessionInUrl: false
+        detectSessionInUrl: false,
+        lock: customLock // Use dummy lock
     }
-} : {});
+} : {
+    auth: {
+        lock: customLock // Use dummy lock
+    }
+});
 
 // Global Fallback Client (initially same as main)
 window.sbRpcClient = sbClient;
