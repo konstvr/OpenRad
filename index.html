@@ -114,6 +114,13 @@
 
         <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
 
+            <div class="text-center py-4 mb-6">
+                <h1 class="text-lg md:text-xl font-semibold text-slate-600 dark:text-slate-300">
+                    Expert-curated repository of <span class="text-violet-600 dark:text-violet-400">Open-access AI
+                        models for Radiology</span>
+                </h1>
+            </div>
+
             <div x-show="!$store.auth.user && !loading" class="text-center py-20" x-cloak>
                 <div class="p-4 bg-slate-100 dark:bg-slate-800 rounded-full inline-block mb-4">
                     <svg class="w-12 h-12 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -172,17 +179,10 @@
 
                         <div class="space-y-2">
                             <label
-                                class="flex items-center justify-between p-2.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-violet-300 transition">
-                                <span
-                                    class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Verified
-                                    Only</span>
-                                <input type="checkbox" x-model="filterVerified" class="w-4 h-4 text-violet-600 rounded">
-                            </label>
-                            <label
                                 class="flex items-center justify-between p-2.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-green-300 transition">
                                 <span
-                                    class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Weight
-                                    Availability</span>
+                                    class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Available
+                                    Model Weights</span>
                                 <input type="checkbox" x-model="filterWeights" class="w-4 h-4 text-green-600 rounded">
                             </label>
                             <label
@@ -371,7 +371,7 @@
                         </div>
                         <div
                             class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                            <h3 class="text-lg font-bold text-slate-500 uppercase mb-4">Weight Availability</h3>
+                            <h3 class="text-lg font-bold text-slate-500 uppercase mb-4">Available Model Weights</h3>
                             <div class="h-64 relative"><canvas id="weightsChart"></canvas></div>
                         </div>
                     </div>
@@ -416,25 +416,12 @@
             </div>
         </div>
     </div>
-    <footer style="display: none;"
+    <footer
         class="w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 mt-12 py-6 transition-colors duration-300">
-        <div
-            class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div class="text-sm text-slate-500 dark:text-slate-400 text-center md:text-left">
-                <p class="font-medium text-slate-700 dark:text-slate-300">Developed by <a
-                        href="https://scholar.google.com/citations?hl=en&amp;user=aoPG8hAAAAAJ" target="_blank"
-                        rel="noopener noreferrer"
-                        class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">Konstantinos
-                        Vrettos</a></p>
-                <p>&copy; Copyright <a href="https://www.atilab.net/" target="_blank" rel="noopener noreferrer"
-                        class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">ATI Lab</a>,
-                    University of Crete 2026</p>
-            </div>
-            <div class="text-xs text-slate-400 dark:text-slate-500 text-center md:text-right max-w-md">
-                When using the repository please cite:
-                <br class="hidden md:block" />
-                <span class="italic text-slate-700 dark:text-slate-300">"OpenRad: a Curated Repository of Open-access AI
-                    models for Radiology, Vrettos K et al., Under Review, 2026"</span>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center gap-2">
+            <div class="text-sm text-slate-500 dark:text-slate-400 text-center">
+                <p>&copy; Copyright 2026 KV</p>
+                <p class="mt-1">This project uses the MIT licence.</p>
             </div>
         </div>
     </footer>
