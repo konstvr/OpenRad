@@ -132,8 +132,11 @@ document.addEventListener('alpine:init', () => {
             const refs = (desc.References && desc.References[0]) ? desc.References[0] : {};
             const repo = props.repository_analysis || {};
 
-            // Helper to safe join
-            const safeJoin = (arr, sep = ', ') => Array.isArray(arr) ? arr.join(sep) : (arr || '');
+            // Helper to safe join (handles both older String arrays and newer {Name: String} arrays)
+            const safeJoin = (arr, sep = '; ') => {
+                if (!Array.isArray(arr)) return arr || '';
+                return arr.map(item => typeof item === 'object' && item.Name ? item.Name : item).join(sep);
+            };
 
             this.formData.name = m.Name || '';
             this.formData.link = m.Link || '';
@@ -149,11 +152,11 @@ document.addEventListener('alpine:init', () => {
             this.formData.sustainability = props.Sustainability || '';
             this.formData.availability = props.Availability || '';
 
-            this.formData.authors = safeJoin(desc.Authors);
-            this.formData.organizations = safeJoin(desc.Organizations, '; '); // Semicolon for orgs
+            this.formData.authors = safeJoin(desc.Authors, '; '); // Enforce semicolon universally for viewing
+            this.formData.organizations = safeJoin(desc.Organizations, '; ');
             this.formData.funding = desc.Funding || '';
             this.formData.ethical_review = desc["Ethical review"] || '';
-            this.formData.imaging_procedures = safeJoin(img.Procedures);
+            this.formData.imaging_procedures = safeJoin(img.Procedures, ', '); // Procedures keep comma
             this.formData.imaging_comments = img.Comments || '';
 
             this.formData.use_cases = Array.isArray(props.Use) ? props.Use : [];
@@ -227,9 +230,10 @@ document.addEventListener('alpine:init', () => {
             return true;
         },
 
-        processList(str, separator = /[\n,]+/) {
+        processList(str, separator = /[\n;]+/, toObject = false) {
             if (!str) return [];
-            return str.split(separator).map(s => s.trim()).filter(s => s.length > 0);
+            const arr = str.split(separator).map(s => s.trim()).filter(s => s.length > 0);
+            return toObject ? arr.map(name => ({ Name: name })) : arr;
         },
 
         async submitModel() {
@@ -249,8 +253,8 @@ document.addEventListener('alpine:init', () => {
                             "Content": [...this.formData.modalities, ...this.formData.specialties]
                         },
                         "Descriptors": {
-                            "Authors": this.processList(this.formData.authors),
-                            "Organizations": this.processList(this.formData.organizations, /[\n;]+/), // Split by semicolon
+                            "Authors": this.processList(this.formData.authors, /[\n;]+/, true),
+                            "Organizations": this.processList(this.formData.organizations, /[\n;]+/, true),
                             "Funding": this.formData.funding,
                             "Ethical review": this.formData.ethical_review,
                             "References": [
@@ -263,7 +267,7 @@ document.addEventListener('alpine:init', () => {
                         },
                         "Imaging": {
                             "Modalities": [], // Legacy/Schema field, typically empty or dup of Indexing
-                            "Procedures": this.processList(this.formData.imaging_procedures),
+                            "Procedures": this.processList(this.formData.imaging_procedures, /[\n,]+/, false),
                             "Comments": this.formData.imaging_comments
                         },
                         "Model properties": {

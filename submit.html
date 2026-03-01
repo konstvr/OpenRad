@@ -34,7 +34,7 @@
 
     <!-- Re-using app.js for shared config but we need our own app logic too -->
     <script src="js/app.js?v=4a6effa"></script>
-    <script src="js/submit.js?v=4a6effa"></script>
+    <script src="js/submit.js?v=4a6effb"></script>
 
     <div class="max-w-4xl mx-auto px-4 py-8">
 
@@ -154,9 +154,9 @@
                         </h3>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Authors (Comma
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Authors (Semicolon
                                     Separated) <span class="text-red-500">*</span></label>
-                                <textarea x-model="formData.authors" rows="2" placeholder="Startups, Universities..."
+                                <textarea x-model="formData.authors" rows="2" placeholder="Startups; Universities..."
                                     class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
                             </div>
                             <div>
@@ -381,16 +381,25 @@
             </form>
         </div>
     </div>
-    <footer class="w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 mt-12 py-6 transition-colors duration-300">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
+    <footer
+        class="w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 mt-12 py-6 transition-colors duration-300">
+        <div
+            class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <div class="text-sm text-slate-500 dark:text-slate-400 text-center md:text-left">
-                <p class="font-medium text-slate-700 dark:text-slate-300">Developed by <a href="https://scholar.google.com/citations?hl=en&amp;user=aoPG8hAAAAAJ" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">Konstantinos Vrettos</a></p>
-                <p>&copy; Copyright <a href="https://www.atilab.net/" target="_blank" rel="noopener noreferrer" class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">ATI Lab</a>, University of Crete 2026</p>
+                <p class="font-medium text-slate-700 dark:text-slate-300">Developed by <a
+                        href="https://scholar.google.com/citations?hl=en&amp;user=aoPG8hAAAAAJ" target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">Konstantinos
+                        Vrettos</a></p>
+                <p>&copy; Copyright <a href="https://www.atilab.net/" target="_blank" rel="noopener noreferrer"
+                        class="text-violet-600 dark:text-violet-400 hover:underline transition-colors">ATI Lab</a>,
+                    University of Crete 2026</p>
             </div>
             <div class="text-xs text-slate-400 dark:text-slate-500 text-center md:text-right max-w-md">
-                When using the repository please cite: 
-                <br class="hidden md:block"/>
-                <span class="italic text-slate-700 dark:text-slate-300">"OpenRad: a Curated Repository of Open-access AI models for Radiology, Vrettos K et al., Under Review, 2026"</span>
+                When using the repository please cite:
+                <br class="hidden md:block" />
+                <span class="italic text-slate-700 dark:text-slate-300">"OpenRad: a Curated Repository of Open-access AI
+                    models for Radiology, Vrettos K et al., Under Review, 2026"</span>
             </div>
         </div>
     </footer>

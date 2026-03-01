@@ -610,13 +610,13 @@ document.addEventListener('alpine:init', () => {
                 if (!this.draft.Model.Descriptors.References[0].DOI) this.draft.Model.Descriptors.References[0].DOI = '';
                 if (!this.draft.Model.Descriptors.References[0].Title) this.draft.Model.Descriptors.References[0].Title = '';
 
-                // [NEW] Handle Authors and Organizations (Array of Objects form) -> String form
+                // [NEW] Handle Authors and Organizations (Array of Objects form or Legacy String Arrays) -> String form
                 this.draft._authorsString = (this.draft.Model.Descriptors.Authors || [])
-                    .map(a => a.Name)
+                    .map(a => typeof a === 'object' && a.Name ? a.Name : a)
                     .join('; ');
 
                 this.draft._organizationsString = (this.draft.Model.Descriptors.Organizations || [])
-                    .map(o => o.Name)
+                    .map(o => typeof o === 'object' && o.Name ? o.Name : o)
                     .join('; ');
 
                 // Ensure Funding field exists
