@@ -614,6 +614,7 @@ function dashboardApp() {
                     id: row.id,
                     created_at: row.created_at,
                     is_verified: row.is_verified,
+                    is_flagged: row.is_flagged, // [NEW]
                     likes_count: row.likes_count, // [NEW]
                     card_data: row.preview_data // Use the pre-processed JSON from RPC
                 }));

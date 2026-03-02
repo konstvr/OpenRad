@@ -340,7 +340,8 @@
                                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
                                     </path>
                                 </svg>
-                                Delete All
+                                <span
+                                    x-text="'Delete All (' + [...new Set(getFilteredFlags().map(f => f.model_id))].length + ' models)'"></span>
                             </button>
                             <button @click="syncFlags()"
                                 title="Fix inconsistencies where models are stuck as flagged but have no flags"
@@ -439,6 +440,25 @@
                             Trash Can (Soft Deleted)
                         </h2>
                         <div class="flex items-center gap-2">
+                            <button x-show="getRecentDeletionsCount() > 0" @click="revertRecentDeletions()"
+                                :disabled="isReverting"
+                                class="text-xs px-3 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded font-bold flex items-center gap-1 transition disabled:opacity-50 shadow-sm">
+                                <svg x-show="!isReverting" class="w-3 h-3" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 8 9 0 01-18 0z"></path>
+                                </svg>
+                                <svg x-show="isReverting" class="animate-spin h-3 w-3 text-white"
+                                    xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                        stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                    </path>
+                                </svg>
+                                <span
+                                    x-text="isReverting ? 'Reverting...' : 'Revert ' + getRecentDeletionsCount() + ' models (24h)'"></span>
+                            </button>
                             <select x-model="trashFilter"
                                 class="text-xs p-1 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-violet-500">
                                 <template x-for="opt in filterOptions">
@@ -661,7 +681,7 @@
     <script>
         function adminApp() {
             return {
-                user: null, isAdmin: false, activeTab: 'edits', isExporting: false,
+                user: null, isAdmin: false, activeTab: 'edits', isExporting: false, isReverting: false,
                 // Data
                 allModels: [], verifiedModels: [], editCounts: {}, selectedModel: null, currentEdits: [],
                 flaggedModels: [], trash: [], submissions: [], selectedSubmission: null, // Submissions
@@ -970,7 +990,9 @@
                         const { data, error } = await sbClient
                             .from('models')
                             .select('*')
-                            .contains('card_data', { _deleted: true });
+                            .contains('card_data', { _deleted: true })
+                            .order('card_data->>_deleted_at', { ascending: false })
+                            .limit(5000);
 
                         if (error) throw error;
 
@@ -981,6 +1003,11 @@
                             }
                             return { ...m, card_data: cd };
                         });
+
+                        console.log(`Trash total items fetched: ${this.trash.length}`);
+                        const countMissingDt = this.trash.filter(m => !m.card_data?._deleted_at).length;
+                        if (countMissingDt > 0) console.warn(`Found ${countMissingDt} items in trash with no _deleted_at date.`);
+                        console.log("Revert count (24h):", this.getRecentDeletionsCount());
                     } catch (err) {
                         console.error("Error loading trash:", err);
                         alert("Error loading trash: " + err.message);
@@ -1050,6 +1077,64 @@
                     }
                 },
 
+                getRecentDeletionsCount() {
+                    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                    return this.trash.filter(m => {
+                        const deletedAt = m.card_data?._deleted_at ? new Date(m.card_data._deleted_at) : null;
+                        return deletedAt && deletedAt > yesterday;
+                    }).length;
+                },
+
+                async revertRecentDeletions() {
+                    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                    const recentDeletions = this.trash.filter(m => {
+                        const deletedAt = m.card_data?._deleted_at ? new Date(m.card_data._deleted_at) : null;
+                        return deletedAt && deletedAt > yesterday;
+                    });
+
+                    if (recentDeletions.length === 0) {
+                        alert("No models deleted in the last 24h to revert.");
+                        return;
+                    }
+
+                    if (!confirm(`Are you sure you want to revert ${recentDeletions.length} model(s) deleted in the last 24h?`)) return;
+
+                    this.isReverting = true;
+                    let successCount = 0;
+                    try {
+                        // Process in small batches to avoid timeout or overwhelming the API
+                        const chunkSize = 10;
+                        for (let i = 0; i < recentDeletions.length; i += chunkSize) {
+                            const chunk = recentDeletions.slice(i, i + chunkSize);
+                            const promises = chunk.map(async (model) => {
+                                let newData = { ...model.card_data, _deleted: false };
+                                if (typeof model.card_data === 'string') newData = { ...JSON.parse(model.card_data), _deleted: false };
+                                delete newData._deleted_at;
+
+                                const { error } = await sbClient.from('models').update({
+                                    card_data: newData
+                                }).eq('id', model.id);
+
+                                if (!error) {
+                                    successCount++;
+                                } else {
+                                    console.error(`Failed to restore model ${model.id}:`, error);
+                                }
+                            });
+                            await Promise.all(promises);
+                        }
+
+                        alert(`Successfully restored ${successCount} models.`);
+                        await this.loadTrash();
+                        if (this.activeTab === 'edits') await this.loadEdits();
+                    } catch (err) {
+                        console.error("Error in mass revert:", err);
+                        alert("An error occurred during mass revert: " + err.message);
+                    } finally {
+                        this.isReverting = false;
+                    }
+                },
+
                 async deleteModel(flag, skipConfirm = false, skipRefresh = false) {
                     if (!skipConfirm && !confirm("CONFIRM DELETION:\nThis will hide the model from the public site immediately.\n(Soft Delete)")) return false;
 
@@ -1091,13 +1176,13 @@
 
                         // Refresh views
                         if (!skipRefresh) {
+                            console.log(`Refreshing views after deletion of ${flag.model_id}`);
                             this.loadTrash();
-                            // this.loadEdits(); // Might be expensive
                             await this.loadFlags();
                         }
                         return true;
                     } catch (err) {
-                        console.error(err);
+                        console.error(`Error deleting model ${flag.model_id}:`, err);
                         alert("Error deleting: " + err.message);
                         return false;
                     }
@@ -1535,27 +1620,48 @@
                 },
 
                 async deleteAllFlags() {
+                    console.log("Starting deleteAllFlags...");
                     const flags = this.getFilteredFlags();
+                    console.log(`Found ${flags.length} flags to delete.`);
+
                     if (flags.length === 0) {
+                        console.log("No flags matching filter.");
                         alert("No configured flags matching this filter to delete.");
                         return;
                     }
-                    if (!confirm(`CONFIRM DELETION:\nThis will delete ${flags.length} flagged model(s) matching the current filter. Proceed?`)) return;
+                    if (!confirm(`CONFIRM DELETION:\nThis will delete ${flags.length} flagged model(s) matching the current filter. Proceed?`)) {
+                        console.log("Deletion cancelled by user.");
+                        return;
+                    }
 
                     this.loading = true;
                     try {
                         let deleted = 0;
-                        for (let flag of flags) {
+                        console.log("Commencing bulk deletion...");
+                        for (let i = 0; i < flags.length; i++) {
+                            const flag = flags[i];
+                            console.log(`Processing flag ${i + 1}/${flags.length}: Model ${flag.model_id}`);
                             const success = await this.deleteModel(flag, true, true);
-                            if (success) deleted++;
+                            if (success) {
+                                deleted++;
+                                console.log(`Successfully deleted model ${flag.model_id}. Total deleted: ${deleted}`);
+                            } else {
+                                console.error(`Failed to delete model ${flag.model_id}.`);
+                            }
                         }
+                        console.log(`Bulk deletion finished. Total models deleted: ${deleted}`);
                         alert(`Successfully deleted ${deleted} model(s).`);
-                        this.loadTrash();
+
+                        console.log("Refreshing data...");
+                        await this.loadTrash();
                         await this.loadFlags();
+                        console.log("Data refreshed.");
                     } catch (e) {
+                        console.error("Error during bulk delete loop:", e);
                         alert("Error during bulk delete: " + e.message);
                     } finally {
                         this.loading = false;
+                        console.log("deleteAllFlags task complete.");
                     }
                 },
 

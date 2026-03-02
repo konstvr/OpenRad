@@ -75,7 +75,30 @@ function drawChart(id, type, labels, countFn, displayLabels, directData = null) 
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { position: type === 'bar' ? 'none' : 'right' } },
+            plugins: {
+                legend: { position: type === 'bar' ? 'none' : 'right' },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            let label = context.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if ((type === 'doughnut' || type === 'pie') && (id === 'weightsChart' || id === 'validationChart')) {
+                                // Calculate percentage
+                                const dataset = context.dataset;
+                                const total = dataset.data.reduce((acc, curr) => acc + curr, 0);
+                                const currentValue = dataset.data[context.dataIndex];
+                                const percentage = Math.round((currentValue / total) * 100);
+                                label += percentage + '%';
+                            } else {
+                                label += context.raw;
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
             ...(type === 'bar' ? {
                 scales: {
                     x: {
