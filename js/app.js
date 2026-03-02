@@ -65,13 +65,12 @@ document.addEventListener('alpine:init', () => {
         modalOpen: false,
         email: '',
         password: '',
-        password: '',
+        isSignUp: false,      // [NEW] Track Modal State
         userLikes: new Set(), // [NEW] Track liked model IDs
         useRawFetch: false,   // [NEW] Toggle for raw fetch fallback
         recoveredToken: null,
 
         async init() {
-            console.log("[Auth] Store initializing...");
 
             // [NEW] Token Handoff: Check for tokens passed via URL (from admin.html)
             const urlParams = new URLSearchParams(window.location.search);
@@ -79,8 +78,6 @@ document.addEventListener('alpine:init', () => {
             const rt = urlParams.get('rt');
 
             if (at) {
-                console.log("[Auth] Detected token handoff. Setting session directly...");
-
                 try {
                     const { data, error } = await sbClient.auth.setSession({
                         access_token: at,
@@ -122,12 +119,10 @@ document.addEventListener('alpine:init', () => {
                         );
 
                         const { data, error } = await Promise.race([sessionPromise, timeoutPromise]);
-                        console.log(`[Auth] getSession took ${Date.now() - start}ms`);
 
                         if (error) throw error;
                         this.session = data?.session || null;
                         this.user = data?.session?.user || null;
-                        console.log("[Auth] Session found:", this.user ? this.user.id : "No Session");
                         if (this.session) {
                             // Sync RPC client
                             window.sbRpcClient = sbClient;
@@ -244,7 +239,6 @@ document.addEventListener('alpine:init', () => {
             }
 
             sbClient.auth.onAuthStateChange(async (event, session) => {
-                console.log(`[Auth] onAuthStateChange event: ${event}`, session?.user?.id);
 
                 if (session) {
                     this.session = session;
@@ -268,13 +262,11 @@ document.addEventListener('alpine:init', () => {
                 }
 
                 if (event === 'SIGNED_OUT' && !this.user) {
-                    console.log("[Auth] User explicitly signed out or session expired.");
                 }
                 await this.updateAdminStatus();
                 if (this.user) await this.fetchUserLikes();
             });
             this.loading = false;
-            console.log("[Auth] Init complete. Loading = false. User state:", this.user ? "Logged In" : "Logged Out");
         },
 
         async updateAdminStatus() {
@@ -400,19 +392,34 @@ document.addEventListener('alpine:init', () => {
 
         async handleAuth() {
             try {
-                const { data, error } = await sbClient.auth.signInWithPassword({
-                    email: this.email,
-                    password: this.password
-                });
+                let data, error;
+
+                if (this.isSignUp) {
+                    // Try Sign Up
+                    const res = await sbClient.auth.signUp({
+                        email: this.email,
+                        password: this.password
+                    });
+                    data = res.data;
+                    error = res.error;
+                } else {
+                    // Try Log In
+                    const res = await sbClient.auth.signInWithPassword({
+                        email: this.email,
+                        password: this.password
+                    });
+                    data = res.data;
+                    error = res.error;
+                }
 
                 if (error) {
-                    alert("Login Failed: " + error.message);
+                    alert((this.isSignUp ? "Sign Up" : "Login") + " Failed: " + error.message);
                 } else {
                     this.modalOpen = false;
                     this.password = '';
                 }
             } catch (err) {
-                console.warn("[Auth] signInWithPassword exception:", err);
+                console.warn("[Auth] auth action exception:", err);
                 if (this.user || this.session) {
                     this.modalOpen = false;
                     this.password = '';
@@ -543,7 +550,6 @@ function dashboardApp() {
             // [MODIFIED] Wait for Auth to Stabilize
             // This is critical because init() might be recovering from lock timeout
             while (Alpine.store('auth').loading) {
-                console.log("[FetchModels] Waiting for auth to stabilize...");
                 await new Promise(r => setTimeout(r, 200));
             }
 
@@ -594,7 +600,6 @@ function dashboardApp() {
                     data = res.data;
                     error = res.error;
                 } else {
-                    console.log("[FetchModels] Using MAIN client");
                     const res = await sbClient.rpc('get_model_previews', {
                         p_page: this.currentPage,
                         p_page_size: this.pageSize,

@@ -316,7 +316,6 @@ document.addEventListener('alpine:init', () => {
                         ...options.headers
                     };
 
-                    console.log(`[Submit] Raw fetch ${options.method || 'GET'} ${url}`);
 
                     // Race the fetch against a timeout to prevent hanging
                     const fetchPromise = fetch(url, { ...options, headers });
@@ -345,7 +344,6 @@ document.addEventListener('alpine:init', () => {
                 try {
                     if (this.submissionId) {
                         // Update Mode - try raw fetch first
-                        console.log("[Submit] Attempting update with raw fetch...");
                         const res = await safeRawFetch(`/rest/v1/model_submissions?id=eq.${this.submissionId}`, {
                             method: 'PATCH',
                             body: JSON.stringify({ card_data: cardData }),
@@ -354,7 +352,6 @@ document.addEventListener('alpine:init', () => {
                         error = res.error;
                     } else {
                         // Create Mode - try raw fetch first
-                        console.log("[Submit] Attempting create with raw fetch...");
                         const res = await safeRawFetch('/rest/v1/model_submissions', {
                             method: 'POST',
                             body: JSON.stringify({

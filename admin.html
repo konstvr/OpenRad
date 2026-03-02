@@ -771,11 +771,15 @@
                         }
                     });
 
-                    if (this.user) await this.checkRoleAndLoad();
+                    if (this.user) {
+                        await this.checkRoleAndLoad();
+                    } else {
+                        alert("Access Denied: Please log in to access the administrator panel.");
+                        window.location.href = 'index.html';
+                    }
                 },
 
                 async checkRoleAndLoad() {
-                    console.log("Checking role for user", this.user.id);
                     const { data, error } = await sbClient
                         .from('user_roles')
                         .select('role')
@@ -1004,7 +1008,6 @@
                             return { ...m, card_data: cd };
                         });
 
-                        console.log(`Trash total items fetched: ${this.trash.length}`);
                         const countMissingDt = this.trash.filter(m => !m.card_data?._deleted_at).length;
                         if (countMissingDt > 0) console.warn(`Found ${countMissingDt} items in trash with no _deleted_at date.`);
                         console.log("Revert count (24h):", this.getRecentDeletionsCount());
@@ -1470,7 +1473,6 @@
                                 } else {
                                     more = false;
                                 }
-                                console.log(`Fetched ${allData.length} from ${table}...`);
                             }
                             return allData;
                         };
@@ -1503,11 +1505,8 @@
                             } else {
                                 more = false;
                             }
-                            console.log(`Fetched ${edits.length} edits...`);
                         }
 
-
-                        console.log(`Exporting ${models.length} models and ${edits.length} edit records...`);
 
                         // 3. Process and Join
                         const exportData = models.map(m => {
@@ -1620,27 +1619,21 @@
                 },
 
                 async deleteAllFlags() {
-                    console.log("Starting deleteAllFlags...");
                     const flags = this.getFilteredFlags();
-                    console.log(`Found ${flags.length} flags to delete.`);
 
                     if (flags.length === 0) {
-                        console.log("No flags matching filter.");
                         alert("No configured flags matching this filter to delete.");
                         return;
                     }
                     if (!confirm(`CONFIRM DELETION:\nThis will delete ${flags.length} flagged model(s) matching the current filter. Proceed?`)) {
-                        console.log("Deletion cancelled by user.");
                         return;
                     }
 
                     this.loading = true;
                     try {
                         let deleted = 0;
-                        console.log("Commencing bulk deletion...");
                         for (let i = 0; i < flags.length; i++) {
                             const flag = flags[i];
-                            console.log(`Processing flag ${i + 1}/${flags.length}: Model ${flag.model_id}`);
                             const success = await this.deleteModel(flag, true, true);
                             if (success) {
                                 deleted++;
@@ -1661,7 +1654,6 @@
                         alert("Error during bulk delete: " + e.message);
                     } finally {
                         this.loading = false;
-                        console.log("deleteAllFlags task complete.");
                     }
                 },
 

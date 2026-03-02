@@ -30,7 +30,6 @@ document.addEventListener('alpine:init', () => {
             if (authStore) {
                 let safety = 0;
                 while (authStore.loading && safety < 400) { // Max 20.0s wait (covers 10s lock timeout + overhead)
-                    if (safety % 20 === 0) console.log("[Details] Waiting for auth...");
                     await new Promise(r => setTimeout(r, 50));
                     safety++;
                 }
@@ -97,15 +96,10 @@ document.addEventListener('alpine:init', () => {
 
             this.model = data;
 
-            // [DEBUG] Log initial data
-            console.log("Fetched model data:", this.model);
-            console.log("Type of card_data:", typeof this.model.card_data);
-
             // [FIX] Recursive parsing to handle potential double-stringification
             let parseAttempts = 0;
             while (this.model.card_data && typeof this.model.card_data === 'string' && parseAttempts < 3) {
                 try {
-                    console.log("Parsing card_data (attempt " + (parseAttempts + 1) + ")...");
                     this.model.card_data = JSON.parse(this.model.card_data);
                 } catch (e) {
                     console.error("Failed to parse card_data:", e);
@@ -114,7 +108,7 @@ document.addEventListener('alpine:init', () => {
                 parseAttempts++;
             }
 
-            console.log("Final card_data:", this.model.card_data);
+            this.model.card_data = this.model.card_data;
 
             // Check for existing flag
             // 1. Check if the model itself is flagged (Visible to everyone)
@@ -157,7 +151,6 @@ document.addEventListener('alpine:init', () => {
 
         // --- AUTH HELPERS ---
         async startKeepAlive() {
-            console.log("[Details] Starting Keep-Alive (every 2m)...");
             if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
 
             // Check immediately once
@@ -166,7 +159,6 @@ document.addEventListener('alpine:init', () => {
             // Then every 2 minutes (120000ms)
             // Token usually lasts 1hr (3600s). 2min is very safe.
             this.keepAliveInterval = setInterval(async () => {
-                console.log("[Details] Keeping session alive...");
                 try {
                     await this.ensureSession();
                 } catch (e) {
@@ -207,7 +199,6 @@ document.addEventListener('alpine:init', () => {
             if (!expiresAt) return this.user;
 
             const timeRemaining = expiresAt - now;
-            console.log(`[Details] Session check: Expires in ${timeRemaining}s`);
 
             // 2. Check if expiring soon (within 5 mins = 300s)
             if (timeRemaining < 300) {
@@ -553,7 +544,19 @@ document.addEventListener('alpine:init', () => {
         },
 
         // --- EDIT LOGIC ---
-        toggleEdit() {
+        async toggleEdit() {
+            try {
+                await this.ensureSession();
+            } catch (e) {
+                console.error("[Details] Auth check failed for edit toggle:", e);
+                // Fallthrough mapped to next check
+            }
+
+            if (!this.user) {
+                Alpine.store('auth').modalOpen = true;
+                return;
+            }
+
             /*
             if (this.isFlagged && !this.editMode && !this.isAdmin) {
                 alert("Cannot edit a flagged model.");
@@ -756,7 +759,6 @@ document.addEventListener('alpine:init', () => {
                     }
                 }
 
-                console.log("[Details] Checking field diffs...");
 
                 // [NEW] Merge Modalities and Specialties back into Content
                 // Preserve any existing codes that are NOT in our managed lists (to be safe)
@@ -893,7 +895,6 @@ document.addEventListener('alpine:init', () => {
                                 console.error(`[Details] Failed to log edit for ${f.path}`, auditErr);
                             }
                         }
-                        console.log(`[Details] Edit saved for ${f.path}`);
                     }
                 }
 

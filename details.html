@@ -46,8 +46,8 @@
                 </svg>
                 Back to Overview
             </a>
-            <div class="flex gap-3" x-show="$store.auth.user" x-cloak>
-                <a href="profile.html"
+            <div class="flex gap-3" x-cloak>
+                <a href="profile.html" x-show="$store.auth.user"
                     class="px-4 py-2 rounded-lg font-bold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
                     My Dashboard
                 </a>
@@ -870,21 +870,49 @@
             @click="$store.auth.modalOpen = false">
             <div class="relative bg-white dark:bg-slate-800 p-8 rounded-xl shadow-xl w-96 border border-slate-200 dark:border-slate-700"
                 @click.stop>
-                <h3 class="text-xl font-bold mb-4 dark:text-white">Login Required</h3>
-                <div class="mb-3">
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
-                    <input type="email" x-model="$store.auth.email" placeholder="name@example.com"
-                        class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500">
+                <h3 class="text-xl font-bold mb-4 dark:text-white"
+                    x-text="$store.auth.isSignUp ? 'Sign Up Suspended' : 'Login Required'"></h3>
+
+                <!-- Log In Form -->
+                <div x-show="!$store.auth.isSignUp" x-cloak>
+                    <div class="mb-3">
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
+                        <input type="email" x-model="$store.auth.email" placeholder="name@example.com"
+                            class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500">
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Password</label>
+                        <input type="password" x-model="$store.auth.password" placeholder="••••••••"
+                            class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500"
+                            @keyup.enter="$store.auth.handleAuth()">
+                    </div>
+                    <button @click="$store.auth.handleAuth()"
+                        class="w-full bg-violet-600 text-white py-2 rounded font-bold hover:bg-violet-700 transition mb-4">
+                        Log In
+                    </button>
                 </div>
-                <div class="mb-6">
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Password</label>
-                    <input type="password" x-model="$store.auth.password" placeholder="••••••••"
-                        class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500"
-                        @keyup.enter="$store.auth.handleAuth()">
+
+                <!-- Sign Up Suspended Message -->
+                <div x-show="$store.auth.isSignUp" x-cloak class="mb-6 mt-2 text-center">
+                    <div
+                        class="p-4 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-200 rounded-lg text-sm border border-orange-200 dark:border-orange-800/50">
+                        <svg class="w-8 h-8 mx-auto mb-3 text-orange-500" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                            </path>
+                        </svg>
+                        <p class="font-medium">Sign-up is temporarily suspended to preserve anonymity, because the work
+                            is currently Under Review.</p>
+                    </div>
                 </div>
-                <button @click="$store.auth.handleAuth()"
-                    class="w-full bg-violet-600 text-white py-2 rounded font-bold hover:bg-violet-700 transition mb-4">Log
-                    In</button>
+
+                <!-- Toggle -->
+                <div class="text-center border-t border-slate-100 dark:border-slate-700 pt-4 mt-2">
+                    <button @click="$store.auth.isSignUp = !$store.auth.isSignUp"
+                        class="text-sm font-medium text-violet-500 hover:text-violet-600 transition"
+                        x-text="$store.auth.isSignUp ? 'Back to Log In' : 'Need an account? Sign Up'"></button>
+                </div>
             </div>
         </div>
     </div>
