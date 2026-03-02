@@ -49,9 +49,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         // Constants (matching app.js)
-        MODALITY_CODES: [
-            "CT", "MR", "XR", "US", "NM", "PET", "MG", "DX", "CR", "RF", "SC", "OT"
-        ],
+        MODALITY_CODES: ["CT", "FL", "MR", "NM", "PET", "US", "XR", "DXA"],
         SUBSPECIALTY_CODES: [
             "AB", "BR", "CA", "CH", "ER", "GI", "GU", "HN", "IR", "MI",
             "MK", "NR", "OB", "OI", "OT", "PD", "QI", "RS", "VI"
@@ -59,12 +57,13 @@ document.addEventListener('alpine:init', () => {
         FULL_MAPPING: {
             "BR": "Breast", "BQ": "Biomarkers", "CA": "Cardiac Radiology", "CH": "Chest Radiology",
             "CT": "Computed Tomography", "DM": "Digital Mammography", "ED": "Education", "ER": "Emergency Radiology",
-            "GI": "Gastrointestinal", "GU": "Genitourinary", "HN": "Head and Neck", "IR": "Interventional Radiology",
-            "MI": "Medical Informatics", "MK": "Musculoskeletal", "MR": "Magnetic Resonance Imaging", "NM": "Nuclear Medicine",
-            "NR": "Neuroradiology", "OB": "Obstetric/Gynecologic", "OI": "Optical Imaging", "OT": "Other",
-            "PD": "Pediatric Radiology", "QI": "Quantitative Imaging", "RF": "Fluoroscopy", "RS": "Radiation Oncology",
-            "SC": "Secondary Capture", "US": "Ultrasound", "VI": "Vascular Intervention", "XR": "X-Ray",
-            "DX": "Digital Radiography", "MG": "Mammography", "PET": "Positron Emission Tomography"
+            "GI": "Gastrointestinal Radiology", "GU": "Genitourinary Radiology", "HN": "Head and Neck", "HP": "Health Policy",
+            "IN": "Informatics", "IR": "Interventional", "LM": "Leadership & Management", "MI": "Molecular Imaging",
+            "MK": "Musculoskeletal Radiology", "MR": "Magnetic Resonance Imaging", "NM": "Nuclear Medicine", "NR": "Neuroradiology",
+            "OB": "Obstetric/Gynecologic Radiology", "OI": "Oncologic Imaging", "OT": "Other", "PD": "Pediatric Radiology",
+            "PH": "Physics and Basic Science", "PR": "Professionalism", "SQ": "Quality Assurance", "RO": "Radiation Oncology",
+            "RS": "Research and Statistical Methods", "US": "Ultrasound", "VA": "Vascular", "VI": "Vascular", "AB": "Abdomen", "FL": "Fluoroscopy",
+            "XR": "X-ray", "DXA": "DEXA"
         },
         USE_CATEGORIES: ["Classification", "Detection", "Segmentation", "Foundation", "LLM", "Generative", "Other"],
 

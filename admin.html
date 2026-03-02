@@ -211,10 +211,19 @@
                                             </path>
                                         </svg>
                                     </a>
+                                    <button x-show="editCounts[selectedModel.id]"
+                                        @click="acceptPendingEdits(selectedModel)"
+                                        class="text-xs bg-emerald-100 text-emerald-800 px-3 py-1 rounded font-bold hover:bg-emerald-200 transition shadow">Accept
+                                        Pending</button>
+                                    <button x-show="editCounts[selectedModel.id]"
+                                        @click="rejectPendingEdits(selectedModel)"
+                                        class="text-xs bg-rose-100 text-rose-800 px-3 py-1 rounded font-bold hover:bg-rose-200 transition shadow">Reject
+                                        Pending</button>
+
                                     <button x-show="selectedModel.is_verified" @click="unverifyModel()"
                                         class="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded font-bold hover:bg-amber-200 transition">Unverify</button>
                                     <button @click="revertModel()"
-                                        class="text-xs bg-red-100 text-red-700 px-3 py-1 rounded font-bold hover:bg-red-200 transition">Revert
+                                        class="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded font-bold hover:bg-slate-200 transition">Revert
                                         Changes</button>
                                 </div>
                             </div>
@@ -237,8 +246,12 @@
                             </div>
                             <div class="flex-1 overflow-y-auto p-6 space-y-4">
                                 <template x-for="edit in currentEdits" :key="edit.id">
-                                    <div
-                                        class="bg-slate-50 dark:bg-slate-900/30 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
+                                    <div :class="edit.status === 'pending' ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' : 'bg-slate-50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-700'"
+                                        class="rounded-lg p-4 border relative">
+
+                                        <div x-show="edit.status === 'pending'"
+                                            class="absolute -top-3 -right-3 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                                            PENDING</div>
 
                                         <div class="flex justify-between items-start mb-2">
                                             <div class="text-xs font-bold text-violet-600 uppercase"
@@ -772,11 +785,17 @@
                     const { data: edits } = await sbClient.from('model_edits').select('*').order('created_at', { ascending: false });
                     this.allEdits = edits || [];
                     this.editCounts = {};
+                    this.latestEditDates = {};
 
-                    // Calculate edit counts
+                    // Calculate edit counts and track newest edit date for sorting
                     this.allEdits.forEach(e => {
                         if (e.field_path !== '__FLAG__') {
-                            this.editCounts[e.model_id] = (this.editCounts[e.model_id] || 0) + 1;
+                            if (e.status === 'pending') {
+                                this.editCounts[e.model_id] = (this.editCounts[e.model_id] || 0) + 1;
+                            }
+                            if (!this.latestEditDates[e.model_id]) {
+                                this.latestEditDates[e.model_id] = e.created_at;
+                            }
                         }
                     });
 
@@ -791,44 +810,52 @@
                 async fetchModels() {
                     this.isLoadingMore = true;
                     try {
-                        let query = sbClient
+                        const editedIds = Object.keys(this.editCounts);
+                        let allFetchedData = [];
+                        let verifiedDataLength = 0;
+
+                        // 1. Explicitly fetch ALL models with pending edits on the first page load
+                        // This prevents unverified models from being buried beneath older pages
+                        if (this.currentPage === 0 && editedIds.length > 0) {
+                            let pendingQuery = sbClient.from('models').select('*').in('id', editedIds);
+                            if (this.searchInput) {
+                                pendingQuery = pendingQuery.ilike('card_data->Model->>Name', `%${this.searchInput}%`);
+                            }
+                            const { data: pendingData, error: pendingError } = await pendingQuery;
+                            if (pendingError) throw pendingError;
+                            if (pendingData) allFetchedData.push(...pendingData);
+                        }
+
+                        // 2. Fetch paginated verified models
+                        let verifiedQuery = sbClient
                             .from('models')
                             .select('*')
-                            .order('verification_date', { ascending: false, nullsFirst: false })
-                            .order('created_at', { ascending: false })
-                            .range(this.currentPage * this.itemsPerPage, (this.currentPage + 1) * this.itemsPerPage - 1);
-
-                        // OR logic: verified=true OR has edits
-                        // Since Supabase .or() with complex cross-table filters is tricky in one go, 
-                        // and we want EITHER verified OR has_edits, let's simplify:
-                        // We fetch verified models, and if editCounts has keys, we ensure those are included?
-                        // Actually, the user wants "Verified Models" tab. 
-                        // Let's filter by verified only for now, OR valid items.
-                        // "Verified Models" usually means is_verified=true. 
-                        // But previous code showed `(m.is_verified === true) || (this.editCounts[m.id] > 0)`.
-                        // Supabase .or() syntax: .or('is_verified.eq.true,id.in.(' + Object.keys(this.editCounts).join(',') + ')')
-
-                        const editedIds = Object.keys(this.editCounts);
-                        let orClause = 'is_verified.eq.true';
-                        if (editedIds.length > 0) {
-                            orClause += `,id.in.(${editedIds.join(',')})`;
-                        }
-                        query = query.or(orClause);
-
-                        // NOT deleted
-                        // We can't easily query JSONB for _deleted without a specific operator or column.
-                        // Assuming most don't have _deleted. We'll filter client side if needed, but better to filter server side.
-                        // query = query.not('card_data->>_deleted', 'eq', 'true'); // If we could.
-                        // Let's trust they aren't deleted or just filter after fetch.
+                            .eq('is_verified', true)
+                            .order('verification_date', { ascending: false, nullsFirst: false });
 
                         if (this.searchInput) {
-                            // Search by Model Name in JSONB
-                            // Requires card_data->Model->>Name text search
-                            query = query.ilike('card_data->Model->>Name', `%${this.searchInput}%`);
+                            verifiedQuery = verifiedQuery.ilike('card_data->Model->>Name', `%${this.searchInput}%`);
+                        } else {
+                            verifiedQuery = verifiedQuery.range(this.currentPage * this.itemsPerPage, (this.currentPage + 1) * this.itemsPerPage - 1);
                         }
 
-                        const { data, error } = await query;
-                        if (error) throw error;
+                        const { data: verifiedData, error: verifiedError } = await verifiedQuery;
+                        if (verifiedError) throw verifiedError;
+
+                        if (verifiedData) {
+                            allFetchedData.push(...verifiedData);
+                            verifiedDataLength = verifiedData.length;
+                        }
+
+                        // Deduplicate the combined fetched data (in case a verified model also has pending edits)
+                        let data = [];
+                        const seenIds = new Set();
+                        for (const m of allFetchedData) {
+                            if (!seenIds.has(m.id)) {
+                                seenIds.add(m.id);
+                                data.push(m);
+                            }
+                        }
 
                         if (data && data.length > 0) {
                             const processed = data.map(m => {
@@ -847,7 +874,7 @@
                             // Append to list
                             this.verifiedModels = [...this.verifiedModels, ...processed];
 
-                            if (data.length < this.itemsPerPage) {
+                            if (verifiedDataLength < this.itemsPerPage) {
                                 this.hasMore = false;
                             } else {
                                 this.hasMore = true;
@@ -873,7 +900,14 @@
                 getFilteredModels() {
                     // Start with server-fetched models
                     // Since search is now server-side, we just return the local list
-                    return this.verifiedModels;
+                    // Custom sort: Push most recently modified to the very top
+                    return [...this.verifiedModels].sort((a, b) => {
+                        // Use latest edit date (pending or accepted), falling back to verification_date or created_at
+                        const dateA = new Date(this.latestEditDates[a.id] || a.verification_date || a.created_at).getTime();
+                        const dateB = new Date(this.latestEditDates[b.id] || b.verification_date || b.created_at).getTime();
+
+                        return dateB - dateA; // Descending
+                    });
                 },
 
                 async loadFlags() {
@@ -1187,6 +1221,89 @@
                         alert("Sync failed: " + e.message);
                     } finally {
                         this.loading = false;
+                    }
+                },
+
+                async acceptPendingEdits() {
+                    const pendingEdits = this.currentEdits.filter(e => e.status === 'pending');
+                    if (pendingEdits.length === 0) return;
+                    if (!confirm(`Accept ${pendingEdits.length} pending edit(s)?\nThis will apply them to the model and mark it as verified.`)) return;
+
+                    try {
+                        const sessionRes = await sbClient.auth.getSession();
+                        const adminUid = sessionRes.data?.session?.user?.id;
+
+                        let newData = JSON.parse(JSON.stringify(this.selectedModel.card_data));
+
+                        const safeParse = (val) => {
+                            try { return JSON.parse(val); } catch (e) { return val; }
+                        };
+
+                        pendingEdits.forEach(edit => {
+                            const newValue = safeParse(edit.new_value);
+                            this.setNested(newData, edit.field_path, newValue);
+                        });
+
+                        const { error: updateError } = await sbClient
+                            .from('models')
+                            .update({
+                                card_data: newData,
+                                is_verified: true,
+                                verified_by: adminUid,
+                                verification_date: new Date()
+                            })
+                            .eq('id', this.selectedModel.id);
+
+                        if (updateError) throw updateError;
+
+                        const { error: updateEditsError } = await sbClient
+                            .from('model_edits')
+                            .update({ status: 'accepted' })
+                            .in('id', pendingEdits.map(e => e.id));
+
+                        if (updateEditsError) {
+                            console.warn("Could not batch update edits:", updateEditsError);
+                            // Fallback to loop if .in() fails
+                            for (const edit of pendingEdits) {
+                                await sbClient.from('model_edits').update({ status: 'accepted' }).eq('id', edit.id);
+                            }
+                        }
+
+                        alert("Pending edits accepted successfully.");
+                        this.selectedModel = null;
+                        this.currentEdits = [];
+                        await this.loadEdits();
+                    } catch (err) {
+                        console.error(err);
+                        alert("Error accepting edits: " + err.message);
+                    }
+                },
+
+                async rejectPendingEdits() {
+                    const pendingEdits = this.currentEdits.filter(e => e.status === 'pending');
+                    if (pendingEdits.length === 0) return;
+                    if (!confirm(`Reject ${pendingEdits.length} pending edit(s)?\nThis will permanently delete these suggestions.`)) return;
+
+                    try {
+                        const { error: deleteError } = await sbClient
+                            .from('model_edits')
+                            .delete()
+                            .in('id', pendingEdits.map(e => e.id));
+
+                        if (deleteError) {
+                            // Fallback
+                            for (const edit of pendingEdits) {
+                                await sbClient.from('model_edits').delete().eq('id', edit.id);
+                            }
+                        }
+
+                        alert("Pending edits rejected.");
+                        this.selectedModel = null;
+                        this.currentEdits = [];
+                        await this.loadEdits();
+                    } catch (err) {
+                        console.error(err);
+                        alert("Error rejecting edits: " + err.message);
                     }
                 },
 

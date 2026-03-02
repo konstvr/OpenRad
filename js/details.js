@@ -7,7 +7,7 @@ document.addEventListener('alpine:init', () => {
         draft: null,
         severities: {},
         copySuccess: false,
-        copySuccess: false,
+        submissionSuccess: false,
         isAdmin: false,
 
         // Session State
@@ -852,17 +852,20 @@ document.addEventListener('alpine:init', () => {
                 for (const f of fields) {
                     // Stringify for robust comparison (handles arrays/objects)
                     if (JSON.stringify(f.old) !== JSON.stringify(f.new)) {
+                        const editPayload = {
+                            model_id: this.model.id,
+                            user_id: this.user.id,
+                            field_path: f.path,
+                            old_value: JSON.stringify(f.old) || '',
+                            new_value: JSON.stringify(f.new) || '',
+                            severity: this.severities[f.path] || 'minor',
+                            status: this.isAdmin ? 'accepted' : 'pending'
+                        };
+
                         if (window.safeFetch && Alpine.store('auth').useRawFetch) {
                             await window.safeFetch('/rest/v1/model_edits', {
                                 method: 'POST',
-                                body: JSON.stringify({
-                                    model_id: this.model.id,
-                                    user_id: this.user.id,
-                                    field_path: f.path,
-                                    old_value: JSON.stringify(f.old) || '',
-                                    new_value: JSON.stringify(f.new) || '',
-                                    severity: this.severities[f.path] || 'minor'
-                                })
+                                body: JSON.stringify(editPayload)
                             });
                         } else {
                             // Use Raw Fetch for Audit Logs too (Anti-Hang)
@@ -882,14 +885,7 @@ document.addEventListener('alpine:init', () => {
                                         'Content-Type': 'application/json',
                                         'Prefer': 'return=minimal'
                                     },
-                                    body: JSON.stringify({
-                                        model_id: this.model.id,
-                                        user_id: this.user.id,
-                                        field_path: f.path,
-                                        old_value: JSON.stringify(f.old) || '',
-                                        new_value: JSON.stringify(f.new) || '',
-                                        severity: this.severities[f.path] || 'minor'
-                                    }),
+                                    body: JSON.stringify(editPayload),
                                     signal: controller.signal
                                 });
                                 clearTimeout(id);
@@ -906,7 +902,15 @@ document.addEventListener('alpine:init', () => {
                 if (this.draft.id !== undefined) delete this.draft.id;
                 if (this.draft.created_at !== undefined) delete this.draft.created_at;
 
-                // Prepare Update Payload
+                // [NEW] Short circuit for non-admins: Their edits remain pending for review
+                if (!this.isAdmin) {
+                    this.submissionSuccess = true;
+                    this.editMode = false;
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                }
+
+                // Prepare Update Payload for Admins only
                 const updatePayload = {
                     card_data: this.draft
                 };
