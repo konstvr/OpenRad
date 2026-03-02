@@ -1391,7 +1391,7 @@
                         };
 
                         // 1. Fetch all models (optimized columns)
-                        const models = await fetchAll('models', 'id, card_data');
+                        const models = await fetchAll('models', 'id, card_data, is_flagged, flag_reason, is_verified');
 
                         // 2. Fetch all edits (optimized columns)
                         // Note: For edits, we need to filter out flags carefully.
@@ -1451,6 +1451,9 @@
 
                             // Attach the edits summary to the exported card
                             exportCard['edits'] = editsDict;
+                            exportCard['is_flagged'] = m.is_flagged || false;
+                            exportCard['flag_reason'] = m.flag_reason || null;
+                            exportCard['is_verified'] = m.is_verified || false;
                             return exportCard;
                         });
 
