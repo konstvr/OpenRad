@@ -402,12 +402,8 @@ document.addEventListener('alpine:init', () => {
         },
 
         async handleFlagClick() {
-            console.log("[Details] handleFlagClick");
-            try {
-                await this.ensureSession();
-            } catch (e) {
-                console.error("[Details] Auth check failed for flag click:", e);
-                alert("Please log in to flag models.");
+            if (!this.user) {
+                Alpine.store('auth').modalOpen = true;
                 return;
             }
 
