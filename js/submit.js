@@ -63,7 +63,7 @@ document.addEventListener('alpine:init', () => {
             "OB": "Obstetric/Gynecologic Radiology", "OI": "Oncologic Imaging", "OT": "Other", "PD": "Pediatric Radiology",
             "PH": "Physics and Basic Science", "PR": "Professionalism", "SQ": "Quality Assurance", "RO": "Radiation Oncology",
             "RS": "Research and Statistical Methods", "US": "Ultrasound", "VA": "Vascular", "VI": "Vascular", "AB": "Abdomen", "FL": "Fluoroscopy",
-            "XR": "X-ray", "DXA": "DEXA"
+            "XR": "X-ray", "DXA": "DEXA", "QI": "Quality Improvement"
         },
         USE_CATEGORIES: ["Classification", "Detection", "Segmentation", "Foundation", "LLM", "Generative", "Other"],
 
