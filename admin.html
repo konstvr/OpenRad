@@ -24,7 +24,7 @@
 
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
 
-    <script src="js/app.js?v=c2e8894"></script>
+    <script src="js/app.js?v=c2e8895"></script>
 
     <div x-data="adminApp()" x-init="init()" class="max-w-7xl mx-auto px-4 py-8">
 
@@ -231,20 +231,26 @@
                             </div>
                             <!-- Flag Warning -->
                             <div x-show="selectedModel.is_flagged"
-                                class="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-                                <svg class="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="currentColor"
-                                    viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd"
-                                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                                        clip-rule="evenodd"></path>
-                                </svg>
-                                <div>
-                                    <h4 class="text-sm font-bold text-red-800 uppercase">Model is Flagged</h4>
-                                    <div class="text-sm text-red-700 mt-1">
-                                        Reason: <span class="font-bold"
-                                            x-text="selectedModel.flag_reason || 'Not specified'"></span>
+                                class="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start justify-between gap-3">
+                                <div class="flex items-start gap-3">
+                                    <svg class="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="currentColor"
+                                        viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd"
+                                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                                            clip-rule="evenodd"></path>
+                                    </svg>
+                                    <div>
+                                        <h4 class="text-sm font-bold text-red-800 uppercase">Model is Flagged</h4>
+                                        <div class="text-sm text-red-700 mt-1">
+                                            Reason: <span class="font-bold"
+                                                x-text="selectedModel.flag_reason || 'Not specified'"></span>
+                                        </div>
                                     </div>
                                 </div>
+                                <button @click="unflagModel(selectedModel.id)"
+                                    class="text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700 transition shadow shrink-0">
+                                    Dismiss Flag
+                                </button>
                             </div>
                             <div class="flex-1 overflow-y-auto p-6 space-y-4">
                                 <template x-for="edit in currentEdits" :key="edit.id">
@@ -1194,35 +1200,122 @@
                 },
 
                 async dismissFlag(flag) {
-                    if (!confirm("Dismiss this flag? The model will remain active.")) return;
+                    console.log("[DEBUG] dismissFlag invoked. Flag:", JSON.parse(JSON.stringify(flag)));
+                    if (!confirm("Dismiss this flag? The model will remain active.")) {
+                        console.log("[DEBUG] dismissFlag cancelled by user.");
+                        return;
+                    }
                     try {
+                        console.log("[DEBUG] Deleting flag from model_edits. ID:", flag.id);
                         // 1. Delete this specific flag
                         const { error: deleteError } = await sbClient.from('model_edits').delete().eq('id', flag.id);
-                        if (deleteError) throw deleteError;
+                        if (deleteError) {
+                            console.error("[DEBUG] Delete flag error:", deleteError);
+                            throw deleteError;
+                        }
+                        console.log("[DEBUG] Flag deleted successfully.");
 
                         // 2. Check if any OTHER flags exist for this model
+                        console.log("[DEBUG] Checking if other flags exist for model:", flag.model_id);
                         const { count, error: countError } = await sbClient
                             .from('model_edits')
                             .select('*', { count: 'exact', head: true })
                             .eq('model_id', flag.model_id)
                             .eq('field_path', '__FLAG__');
 
-                        if (countError) throw countError;
+                        if (countError) {
+                            console.error("[DEBUG] Count flags error:", countError);
+                            throw countError;
+                        }
+                        console.log("[DEBUG] Other flags count:", count);
 
                         // 3. If no flags remain, unflag the model publicly
                         if (count === 0 || count === null) {
+                            console.log("[DEBUG] No other flags remain. Updating models table to set is_flagged=false");
                             const { error: updateError } = await sbClient
                                 .from('models')
                                 .update({ is_flagged: false, flag_reason: null })
                                 .eq('id', flag.model_id);
 
-                            if (updateError) throw updateError;
+                            if (updateError) {
+                                console.error("[DEBUG] Update models is_flagged error:", updateError);
+                                throw updateError;
+                            }
+                            console.log("[DEBUG] Models table updated successfully.");
+
+                            // Update local state
+                            console.log("[DEBUG] Updating local states.");
+                            if (this.selectedModel && this.selectedModel.id === flag.model_id) {
+                                this.selectedModel.is_flagged = false;
+                                this.selectedModel.flag_reason = null;
+                            }
+                            const modelInList = this.verifiedModels.find(m => m.id === flag.model_id);
+                            if (modelInList) {
+                                modelInList.is_flagged = false;
+                                modelInList.flag_reason = null;
+                            }
                         }
 
+                        console.log("[DEBUG] Reloading flags queue...");
                         await this.loadFlags();
+                        console.log("[DEBUG] Flags queue reloaded.");
                     } catch (err) {
-                        console.error(err);
+                        console.error("[DEBUG] Caught error in dismissFlag:", err);
                         alert("Error dismissing: " + err.message);
+                    }
+                },
+
+                async unflagModel(modelId) {
+                    console.log("[DEBUG] unflagModel invoked. Model ID:", modelId);
+                    if (!confirm("Are you sure you want to dismiss all flags for this model?")) {
+                        console.log("[DEBUG] unflagModel cancelled by user.");
+                        return;
+                    }
+                    try {
+                        console.log("[DEBUG] Deleting all flag entries for model in model_edits. Model ID:", modelId);
+                        // 1. Delete all flag entries in model_edits for this model
+                        const { error: deleteError } = await sbClient
+                            .from('model_edits')
+                            .delete()
+                            .eq('model_id', modelId)
+                            .eq('field_path', '__FLAG__');
+                        if (deleteError) {
+                            console.error("[DEBUG] Delete all flags error:", deleteError);
+                            throw deleteError;
+                        }
+                        console.log("[DEBUG] All flag entries deleted.");
+
+                        // 2. Unflag the model publicly
+                        console.log("[DEBUG] Updating models table to set is_flagged=false for model ID:", modelId);
+                        const { error: updateError } = await sbClient
+                            .from('models')
+                            .update({ is_flagged: false, flag_reason: null })
+                            .eq('id', modelId);
+                        if (updateError) {
+                            console.error("[DEBUG] Update model is_flagged error:", updateError);
+                            throw updateError;
+                        }
+                        console.log("[DEBUG] Models table updated successfully.");
+
+                        // 3. Update local state
+                        console.log("[DEBUG] Updating local states.");
+                        if (this.selectedModel && this.selectedModel.id === modelId) {
+                            this.selectedModel.is_flagged = false;
+                            this.selectedModel.flag_reason = null;
+                        }
+                        const modelInList = this.verifiedModels.find(m => m.id === modelId);
+                        if (modelInList) {
+                            modelInList.is_flagged = false;
+                            modelInList.flag_reason = null;
+                        }
+
+                        console.log("[DEBUG] Reloading flags queue...");
+                        await this.loadFlags();
+                        console.log("[DEBUG] Flags queue reloaded.");
+                        alert("Model unflagged successfully.");
+                    } catch (err) {
+                        console.error("[DEBUG] Caught error in unflagModel:", err);
+                        alert("Error unflagging model: " + err.message);
                     }
                 },
 

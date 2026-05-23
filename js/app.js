@@ -66,6 +66,7 @@ document.addEventListener('alpine:init', () => {
         email: '',
         password: '',
         isSignUp: false,      // [NEW] Track Modal State
+        errorMessage: '',     // [NEW] Store auth error messages
         userLikes: new Set(), // [NEW] Track liked model IDs
         useRawFetch: false,   // [NEW] Toggle for raw fetch fallback
         recoveredToken: null,
@@ -391,6 +392,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         async handleAuth() {
+            this.errorMessage = '';
             try {
                 let data, error;
 
@@ -413,19 +415,16 @@ document.addEventListener('alpine:init', () => {
                 }
 
                 if (error) {
-                    alert((this.isSignUp ? "Sign Up" : "Login") + " Failed: " + error.message);
+                    console.error("[Auth] Auth failed:", error);
+                    this.errorMessage = error.message;
                 } else {
                     this.modalOpen = false;
                     this.password = '';
+                    this.errorMessage = '';
                 }
             } catch (err) {
-                console.warn("[Auth] auth action exception:", err);
-                if (this.user || this.session) {
-                    this.modalOpen = false;
-                    this.password = '';
-                } else {
-                    alert("Login Error: " + err.message);
-                }
+                console.error("[Auth] Auth action exception:", err);
+                this.errorMessage = err.message || "An unexpected error occurred.";
             }
         },
 
