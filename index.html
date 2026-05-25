@@ -391,45 +391,67 @@
         </main>
 
         <div x-show="$store.auth.modalOpen"
-            x-init="$watch('$store.auth.modalOpen', val => { if(val) { $store.auth.errorMessage = ''; $store.auth.email = ''; $store.auth.password = ''; } else { $store.auth.isSignUp = false; } }); $watch('$store.auth.isSignUp', () => { $store.auth.errorMessage = ''; })"
+            x-init="$watch('$store.auth.modalOpen', val => { if(val) { $store.auth.errorMessage = ''; $store.auth.email = ''; $store.auth.password = ''; $store.auth.signUpSuccess = false; } else { $store.auth.isSignUp = false; } }); $watch('$store.auth.isSignUp', () => { $store.auth.errorMessage = ''; $store.auth.signUpSuccess = false; })"
             class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm" x-cloak
             @click="$store.auth.modalOpen = false">
             <div class="relative bg-white dark:bg-slate-800 p-8 rounded-xl shadow-xl w-96 border border-slate-200 dark:border-slate-700"
                 @click.stop>
-                <h3 class="text-xl font-bold mb-4 dark:text-white"
-                    x-text="$store.auth.isSignUp ? 'Create Account' : 'Login Required'"></h3>
+                
+                <!-- Normal Auth Form -->
+                <div x-show="!$store.auth.signUpSuccess">
+                    <h3 class="text-xl font-bold mb-4 dark:text-white"
+                        x-text="$store.auth.isSignUp ? 'Create Account' : 'Login Required'"></h3>
 
-                <!-- Auth Form -->
-                <div>
-                    <!-- Error Message Display -->
-                    <div x-show="$store.auth.errorMessage"
-                        class="mb-4 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs rounded-lg font-medium"
-                        x-text="$store.auth.errorMessage" x-cloak>
+                    <!-- Auth Form -->
+                    <div>
+                        <!-- Error Message Display -->
+                        <div x-show="$store.auth.errorMessage"
+                            class="mb-4 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs rounded-lg font-medium"
+                            x-text="$store.auth.errorMessage" x-cloak>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
+                            <input type="email" x-model="$store.auth.email" placeholder="name@example.com"
+                                class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500">
+                        </div>
+                        <div class="mb-6">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Password</label>
+                            <input type="password" x-model="$store.auth.password" placeholder="••••••••"
+                                class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500"
+                                @keyup.enter="$store.auth.handleAuth()">
+                        </div>
+                        <button @click="$store.auth.handleAuth()"
+                            class="w-full bg-violet-600 text-white py-2 rounded font-bold hover:bg-violet-700 transition mb-4"
+                            x-text="$store.auth.isSignUp ? 'Sign Up' : 'Log In'">
+                        </button>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
-                        <input type="email" x-model="$store.auth.email" placeholder="name@example.com"
-                            class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500">
+                    <!-- Toggle -->
+                    <div class="text-center border-t border-slate-100 dark:border-slate-700 pt-4 mt-2">
+                        <button @click="$store.auth.isSignUp = !$store.auth.isSignUp"
+                            class="text-sm font-medium text-violet-500 hover:text-violet-600 transition"
+                            x-text="$store.auth.isSignUp ? 'Back to Log In' : 'Need an account? Sign Up'"></button>
                     </div>
-                    <div class="mb-6">
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Password</label>
-                        <input type="password" x-model="$store.auth.password" placeholder="••••••••"
-                            class="w-full p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-600 rounded text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-violet-500"
-                            @keyup.enter="$store.auth.handleAuth()">
+                </div>
+
+                <!-- Success Message Display -->
+                <div x-show="$store.auth.signUpSuccess" class="text-center py-4">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 mb-4">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 19v-8.93a2 2 0 01.89-1.664l8-5.333a2 2 0 012.22 0l8 5.333A2 2 0 0123 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-2.25-1.5a2 2 0 00-2.22 0l-2.25 1.5"></path>
+                        </svg>
                     </div>
-                    <button @click="$store.auth.handleAuth()"
-                        class="w-full bg-violet-600 text-white py-2 rounded font-bold hover:bg-violet-700 transition mb-4"
-                        x-text="$store.auth.isSignUp ? 'Sign Up' : 'Log In'">
+                    <h4 class="text-lg font-bold mb-2 dark:text-white">Verify your email</h4>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+                        We've sent a verification link to <span class="font-semibold text-slate-700 dark:text-slate-200" x-text="$store.auth.email"></span>.<br>
+                        Please check your inbox and <strong>spam folder</strong> to activate your account.
+                    </p>
+                    <button @click="$store.auth.modalOpen = false" class="w-full bg-violet-600 text-white py-2 rounded font-bold hover:bg-violet-700 transition">
+                        Dismiss
                     </button>
                 </div>
 
-                <!-- Toggle -->
-                <div class="text-center border-t border-slate-100 dark:border-slate-700 pt-4 mt-2">
-                    <button @click="$store.auth.isSignUp = !$store.auth.isSignUp"
-                        class="text-sm font-medium text-violet-500 hover:text-violet-600 transition"
-                        x-text="$store.auth.isSignUp ? 'Back to Log In' : 'Need an account? Sign Up'"></button>
-                </div>
             </div>
         </div>
     </div>

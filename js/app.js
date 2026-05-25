@@ -66,6 +66,7 @@ document.addEventListener('alpine:init', () => {
         email: '',
         password: '',
         isSignUp: false,      // [NEW] Track Modal State
+        signUpSuccess: false, // [NEW] Track signup verification status
         errorMessage: '',     // [NEW] Store auth error messages
         userLikes: new Set(), // [NEW] Track liked model IDs
         useRawFetch: false,   // [NEW] Toggle for raw fetch fallback
@@ -418,9 +419,16 @@ document.addEventListener('alpine:init', () => {
                     console.error("[Auth] Auth failed:", error);
                     this.errorMessage = error.message;
                 } else {
-                    this.modalOpen = false;
-                    this.password = '';
-                    this.errorMessage = '';
+                    if (this.isSignUp && !data.session) {
+                        this.signUpSuccess = true;
+                        this.password = '';
+                        this.errorMessage = '';
+                    } else {
+                        this.modalOpen = false;
+                        this.password = '';
+                        this.errorMessage = '';
+                        this.signUpSuccess = false;
+                    }
                 }
             } catch (err) {
                 console.error("[Auth] Auth action exception:", err);
