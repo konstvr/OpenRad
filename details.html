@@ -910,6 +910,9 @@
                             class="w-full bg-violet-600 text-white py-2 rounded font-bold hover:bg-violet-700 transition mb-4"
                             x-text="$store.auth.isSignUp ? 'Sign Up' : 'Log In'">
                         </button>
+                        <p x-show="$store.auth.isSignUp" class="text-[11px] text-center text-slate-500 dark:text-slate-400 -mt-2 mb-4" x-cloak>
+                            By signing up, you agree to our <a href="terms.html" target="_blank" class="text-violet-500 hover:underline font-medium">Terms & Conditions</a> and <a href="privacy.html" target="_blank" class="text-violet-500 hover:underline font-medium">Privacy Policy</a>.
+                        </p>
                     </div>
 
                     <!-- Toggle -->
@@ -951,6 +954,10 @@
             <div class="text-sm text-slate-500 dark:text-slate-400 text-center">
                 <p>&copy; Copyright 2026 KV</p>
                 <p class="mt-1">This project uses the MIT licence.</p>
+                <div class="mt-2 flex gap-4 justify-center text-xs">
+                    <a href="terms.html" class="hover:text-violet-500 transition">Terms & Conditions</a>
+                    <a href="privacy.html" class="hover:text-violet-500 transition">Privacy Policy</a>
+                </div>
             </div>
         </div>
     </footer>

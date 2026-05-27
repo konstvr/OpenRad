@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - OpenRad</title>
+    <link rel="icon" href="data:,">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { slate: { 850: '#1e293b', 900: '#0f172a' }, violet: { 500: '#8b5cf6', 600: '#7c3aed' } }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+
+<body
+    class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-300">
+    <header class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <a href="index.html" class="flex items-center gap-3">
+                <img src="images/logo-new.png" alt="OpenRad Logo" class="h-16 w-auto">
+            </a>
+            <a href="index.html" class="text-sm font-semibold text-violet-600 dark:text-violet-400 hover:underline">
+                Back to Registry
+            </a>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-12">
+        <article
+            class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-6 sm:p-10">
+            <div class="border-b border-slate-200 dark:border-slate-700 pb-6 mb-8">
+                <h1 class="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">Privacy Policy</h1>
+                <p class="text-sm text-slate-500 dark:text-slate-400">Last updated: May 2026</p>
+            </div>
+
+            <div class="space-y-6 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                <section>
+                    <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-3">1. Introduction</h2>
+                    <p>
+                        We respect your privacy and are committed to protecting it. This Privacy Policy explains what
+                        personal information we collect, how we use it, how we secure it, and your rights regarding your
+                        data on the OpenRad registry platform.
+                    </p>
+                </section>
+
+                <section>
+                    <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-3">2. Information We Collect</h2>
+                    <p>
+                        We only collect the minimum amount of information necessary to provide registry features to you:
+                    </p>
+                    <ul class="list-disc pl-5 mt-2 space-y-1.5">
+                        <li><strong>Account Details:</strong> When you register on OpenRad, we collect your email
+                            address.</li>
+                        <li><strong>Platform Actions:</strong> We store records of your contributions to the site,
+                            including AI model submissions, edits, likes, or administrative reports (flagging a model).
+                        </li>
+                        <li><strong>Session Data:</strong> Temporary metadata related to your sign-in status to secure
+                            your connection.</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-3">3. How Your Information is Stored
+                    </h2>
+                    <p>
+                        OpenRad relies on <strong>Supabase</strong> (a secure cloud backend service) for user
+                        authentication and
+                        database management. Your email and password hashes are handled securely through Supabase Auth,
+                        conforming to industry-standard encryption practices. We do not store plain-text passwords.
+                    </p>
+                </section>
+
+                <section class="bg-violet-50 dark:bg-slate-850 p-4 rounded-lg border-l-4 border-violet-500">
+                    <h2 class="text-lg font-bold text-violet-900 dark:text-violet-400 mb-2">4. Cookie Policy & Device
+                        Storage</h2>
+                    <p class="text-violet-950 dark:text-slate-300">
+                        <strong>No tracking or advertising cookies are used on this platform.</strong>
+                    </p>
+                    <p class="mt-2 text-violet-950 dark:text-slate-300">
+                        We utilize your browser's local storage (`localStorage` and `sessionStorage`) strictly for
+                        functional purposes that are necessary for the Service:
+                    </p>
+                    <ul class="list-disc pl-5 mt-2 space-y-1 text-violet-950 dark:text-slate-300">
+                        <li><strong>Authentication:</strong> Saving your encrypted login token to keep you logged in
+                            between visits. This is exempt from standard cookie banners as it is "strictly necessary" to
+                            provide the account features you requested.</li>
+                        <li><strong>UI Preference:</strong> Retaining your choice of Dark or Light mode theme.</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-3">5. Web Analytics (GoatCounter)
+                    </h2>
+                    <p>
+                        We measure website performance and traffic using <strong>GoatCounter</strong>, a privacy-focused
+                        web
+                        statistics tool.
+                    </p>
+                    <ul class="list-disc pl-5 mt-2 space-y-1.5">
+                        <li>GoatCounter does not use cookies to track visitors.</li>
+                        <li>GoatCounter does not collect or store personally identifiable information (PII).</li>
+                        <li>Visitor data (such as browser info and page visits) is completely anonymized and aggregated.
+                        </li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-3">6. Sharing of Personal Data</h2>
+                    <p>
+                        We do not sell, rent, trade, or distribute your email or personal data to third parties. Data is
+                        shared exclusively with our technical hosting and database provider (Supabase) to operate the
+                        registry database.
+                    </p>
+                </section>
+
+                <section>
+                    <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-3">7. Your Data Rights</h2>
+                    <p>
+                        Under regulations like the General Data Protection Regulation (GDPR) and the California Consumer
+                        Privacy Act (CCPA), you have the right to:
+                    </p>
+                    <ul class="list-disc pl-5 mt-2 space-y-1.5">
+                        <li>Request a copy of the personal data we store about you.</li>
+                        <li>Request modifications to any incorrect personal data.</li>
+                        <li>Request the **permanent erasure** of your account and all associated personal data from our
+                            systems.</li>
+                    </ul>
+                    <p class="mt-3">
+                        To exercise these rights or request account deletion, please open a request on our GitHub issues
+                        page linked in the main navigation.
+                    </p>
+                </section>
+            </div>
+        </article>
+    </main>
+
+    <footer
+        class="w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 py-6 transition-colors duration-300">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center gap-2">
+            <div class="text-sm text-slate-500 dark:text-slate-400 text-center">
+                <p>&copy; Copyright 2026 KV</p>
+                <p class="mt-1">This project uses the MIT licence.</p>
+                <div class="mt-2 flex gap-4 justify-center text-xs">
+                    <a href="terms.html" class="hover:text-violet-500 transition">Terms & Conditions</a>
+                    <a href="privacy.html"
+                        class="font-semibold text-violet-600 dark:text-violet-400 hover:underline">Privacy Policy</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Synchronize system preference theme
+        if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+</body>
+
+</html>
