@@ -98,6 +98,124 @@
                 </div>
             </div>
 
+            <!-- Import a model record JSON -->
+            <div x-show="!success && !submissionId"
+                class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 mb-8 overflow-hidden">
+
+                <!-- Primary path: a record you already have -->
+                <div class="p-6 sm:p-7">
+                    <label @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false"
+                        @drop.prevent="handleDrop($event)"
+                        class="group block cursor-pointer rounded-xl border-2 border-dashed px-6 py-9 text-center transition-colors duration-150"
+                        :class="dragging
+                            ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/40'
+                            : 'border-slate-300 dark:border-slate-600 hover:border-violet-400 hover:bg-slate-50 dark:hover:bg-slate-900/60'">
+
+                        <svg class="mx-auto w-7 h-7 transition-colors duration-150"
+                            :class="dragging ? 'text-violet-500' : 'text-slate-400 group-hover:text-violet-500'"
+                            fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                        </svg>
+
+                        <p class="mt-3 text-base font-semibold text-slate-800 dark:text-slate-100">
+                            Drop a model record here
+                        </p>
+                        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                            or <span
+                                class="text-violet-600 dark:text-violet-400 underline underline-offset-2">choose a JSON
+                                file</span>
+                        </p>
+
+                        <input type="file" accept=".json,application/json" @change="importCard($event)" class="hidden">
+                    </label>
+
+                    <p x-show="!importSummary" class="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                        Records use an RSNA-style schema adapted for OpenRad. Every field below fills in
+                        automatically &mdash; nothing is submitted until you review it.
+                    </p>
+
+                    <!-- Import failed -->
+                    <div x-show="importError" x-cloak
+                        class="mt-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2.5 text-sm text-red-700 dark:text-red-300">
+                        <span class="font-semibold">Could not import:</span> <span x-text="importError"></span>
+                    </div>
+
+                    <!-- Import succeeded -->
+                    <template x-if="importSummary">
+                        <div
+                            class="mt-4 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 px-3 py-2.5 text-sm">
+                            <p class="text-green-800 dark:text-green-300">
+                                Loaded <span class="font-semibold" x-text="importSummary.modelName"></span> &mdash;
+                                <span x-text="importSummary.populated + ' of ' + importSummary.total"></span> fields
+                                filled.
+                            </p>
+                            <p x-show="importSummary.missing.length === 0"
+                                class="mt-0.5 font-semibold text-green-700 dark:text-green-400">
+                                Everything required is complete.
+                            </p>
+                            <p x-show="importSummary.missing.length > 0"
+                                class="mt-0.5 text-amber-700 dark:text-amber-400">
+                                <span class="font-semibold">Still needed:</span>
+                                <span x-text="importSummary.missing.join(', ')"></span>
+                            </p>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Fallback path: no record yet -->
+                <div
+                    class="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 px-6 sm:px-7 py-5">
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
+                        <p class="text-sm text-slate-600 dark:text-slate-300 flex-1 min-w-[16rem]">
+                            <span class="font-semibold text-slate-800 dark:text-slate-100">No record yet?</span>
+                            Give the prompt to any LLM along with your paper, then upload what it returns.
+                        </p>
+
+                        <div class="flex items-center gap-2">
+                            <button type="button" @click="copyPrompt()"
+                                class="inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-semibold transition"
+                                :class="promptCopied
+                                    ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                                    : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-violet-400 hover:text-violet-600 dark:hover:text-violet-400'">
+                                <svg x-show="!promptCopied" class="w-4 h-4" fill="none" stroke="currentColor"
+                                    stroke-width="1.75" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3">
+                                    </path>
+                                </svg>
+                                <svg x-show="promptCopied" x-cloak class="w-4 h-4" fill="none" stroke="currentColor"
+                                    stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                <span x-text="promptCopied ? 'Copied' : 'Copy prompt'"></span>
+                            </button>
+
+                            <a href="GEM_PROMPT.md" download title="Download the prompt as a Markdown file"
+                                class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3.5 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-violet-400 hover:text-violet-600 dark:hover:text-violet-400">
+                                Download
+                            </a>
+                        </div>
+                    </div>
+
+                    <p x-show="promptCopyError" x-cloak class="mt-2 text-sm text-amber-700 dark:text-amber-400"
+                        x-text="promptCopyError"></p>
+
+                    <p
+                        class="mt-3 flex items-start gap-2 border-l-2 border-amber-300 dark:border-amber-600/70 pl-3 text-sm leading-relaxed text-amber-800 dark:text-amber-300/90">
+                        <svg class="w-4 h-4 mt-0.5 shrink-0 text-amber-500" fill="none" stroke="currentColor"
+                            stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M12 9v3m0 3h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z">
+                            </path>
+                        </svg>
+                        <span>A generated record is a starting point, not a finished one. LLMs can misattribute
+                            numbers or add details the paper never stated &mdash; check every field against the
+                            source.</span>
+                    </p>
+                </div>
+            </div>
+
             <!-- Error Message -->
             <div x-show="error" class="bg-red-100 border border-red-200 text-red-700 p-4 rounded-xl mb-8">
                 <p class="font-bold">Error:</p>
@@ -354,8 +472,22 @@
                                     class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
                             </div>
                             <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Metric Names
+                                    (One per line, optional)</label>
+                                <textarea x-model="formData.performance_metrics_list" rows="2"
+                                    placeholder="AUROC (Pneumonia)&#10;Dice (GM)"
+                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Modality Description
+                                    (Semicolon Separated)</label>
+                                <textarea x-model="formData.imaging_modalities" rows="2"
+                                    placeholder="Non-contrast head CT; T1-weighted MRI"
+                                    class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
+                            </div>
+                            <div>
                                 <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Imaging Procedures
-                                    (Comma Separated)</label>
+                                    (Semicolon Separated)</label>
                                 <textarea x-model="formData.imaging_procedures" rows="2"
                                     class="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 outline-none"></textarea>
                             </div>
@@ -371,7 +503,11 @@
                 </div>
 
                 <div
-                    class="p-6 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex justify-end">
+                    class="p-6 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex flex-wrap justify-end items-center gap-3">
+                    <button type="button" @click="exportCard()"
+                        class="px-5 py-3 font-bold rounded-lg transition border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+                        Export as JSON
+                    </button>
                     <button type="submit" :disabled="submitting || !isFormValid()"
                         :class="!isFormValid() ? 'opacity-50 cursor-not-allowed bg-slate-400' : 'bg-violet-600 hover:bg-violet-700 shadow-lg'"
                         class="px-8 py-3 text-white font-bold rounded-lg transition flex items-center gap-2">
